@@ -1,0 +1,631 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		034C6A4CB9EDAF636CA34DC5 /* OpenNTFSCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C987A8DEB89A5D6E0CFB6831 /* OpenNTFSCore.framework */; };
+		0AF375759F68322A3A1E94B2 /* FSKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D520B73A633253E81A25F3BA /* FSKit.framework */; };
+		16EFCF0249E9A0E332B524F5 /* OpenNTFSFileSystemExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C29C14ADAAA4CCEDABC29D5 /* OpenNTFSFileSystemExtension.swift */; };
+		462C300027C573B1999F71C1 /* DiskScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1810F8DEDEE0A01BE5E0278D /* DiskScanner.swift */; };
+		5982E6B203411FC13FA6520E /* NTFSBootSector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94EDC82A311F9501F8597931 /* NTFSBootSector.swift */; };
+		629D9059F73E5D6F75F5BE94 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F7D74026CD7A0370527CA722 /* Assets.xcassets */; };
+		70807953900DD50136934DA3 /* OpenNTFSFileSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0EC3160A15B8057A16474E0 /* OpenNTFSFileSystem.swift */; };
+		70BCE24C6BF4FCE5A53B68EF /* SystemInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76C3FD9F022F0D864C396641 /* SystemInspector.swift */; };
+		922E02965FF5E6E2EC5F0373 /* RecommendationEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0832AA089617D8E712190EA7 /* RecommendationEngine.swift */; };
+		CEB7907249C8C16032798BE9 /* OpenNTFSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F0502C9D0AF0CA56281FEA1 /* OpenNTFSApp.swift */; };
+		CF27EC7B0355138E5A3F2FB3 /* MountService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47295ECA613251A18859718D /* MountService.swift */; };
+		D3F2FB9729E432307C4B116A /* OpenNTFSFS.appex in Embed ExtensionKit Extensions */ = {isa = PBXBuildFile; fileRef = A0BB2C90F9DD8CE675C6E0EC /* OpenNTFSFS.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		D4ABEC94FBBB6E7A1B1B325C /* ExtensionFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DAB59F265C3AC57715FE4102 /* ExtensionFoundation.framework */; };
+		DC35526064C5B54D55995FB5 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8C6A286B419FEDC44036FF8 /* Models.swift */; };
+		ED947E553DE2DCB07536A0AB /* CommandRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = B889FF814E91DA32D4873A71 /* CommandRunner.swift */; };
+		EDB35C128FDCC01955206496 /* OpenNTFSCore.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = C987A8DEB89A5D6E0CFB6831 /* OpenNTFSCore.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		F8397783041D21EC5790419B /* BackendDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E8C53C32141F51FBE22BA18 /* BackendDetector.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		1B603CDE16041B85959229BB /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 3B718A76C49CAB30414F7CEB /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E1DF289D67A4D444BE8439B7;
+			remoteInfo = OpenNTFSCore;
+		};
+		73CCE21607242BB0CC9D1AC0 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 3B718A76C49CAB30414F7CEB /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7061615E0C6A4756D0F2EC9B;
+			remoteInfo = OpenNTFSFS;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		25604CA8526F0451229357AA /* Embed ExtensionKit Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(EXTENSIONS_FOLDER_PATH)";
+			dstSubfolderSpec = 16;
+			files = (
+				D3F2FB9729E432307C4B116A /* OpenNTFSFS.appex in Embed ExtensionKit Extensions */,
+			);
+			name = "Embed ExtensionKit Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		34CD340E45F25ED73E25212B /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				EDB35C128FDCC01955206496 /* OpenNTFSCore.framework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		0832AA089617D8E712190EA7 /* RecommendationEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecommendationEngine.swift; sourceTree = "<group>"; };
+		0F0502C9D0AF0CA56281FEA1 /* OpenNTFSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenNTFSApp.swift; sourceTree = "<group>"; };
+		1810F8DEDEE0A01BE5E0278D /* DiskScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiskScanner.swift; sourceTree = "<group>"; };
+		47295ECA613251A18859718D /* MountService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MountService.swift; sourceTree = "<group>"; };
+		4F27075D401CEA1A2647801E /* OpenNTFSApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = OpenNTFSApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5C29C14ADAAA4CCEDABC29D5 /* OpenNTFSFileSystemExtension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenNTFSFileSystemExtension.swift; sourceTree = "<group>"; };
+		722F13334E868D8D1C5789FB /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		7387288B45EE1921132F5B95 /* OpenNTFSFS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = OpenNTFSFS.entitlements; sourceTree = "<group>"; };
+		76C3FD9F022F0D864C396641 /* SystemInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemInspector.swift; sourceTree = "<group>"; };
+		7E8C53C32141F51FBE22BA18 /* BackendDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackendDetector.swift; sourceTree = "<group>"; };
+		94EDC82A311F9501F8597931 /* NTFSBootSector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NTFSBootSector.swift; sourceTree = "<group>"; };
+		A0BB2C90F9DD8CE675C6E0EC /* OpenNTFSFS.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.extensionkit-extension"; includeInIndex = 0; path = OpenNTFSFS.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		B889FF814E91DA32D4873A71 /* CommandRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandRunner.swift; sourceTree = "<group>"; };
+		B8C6A286B419FEDC44036FF8 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		C987A8DEB89A5D6E0CFB6831 /* OpenNTFSCore.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = OpenNTFSCore.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		D520B73A633253E81A25F3BA /* FSKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = FSKit.framework; path = System/Library/Frameworks/FSKit.framework; sourceTree = SDKROOT; };
+		DAB59F265C3AC57715FE4102 /* ExtensionFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ExtensionFoundation.framework; path = System/Library/Frameworks/ExtensionFoundation.framework; sourceTree = SDKROOT; };
+		E0EC3160A15B8057A16474E0 /* OpenNTFSFileSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenNTFSFileSystem.swift; sourceTree = "<group>"; };
+		F7D74026CD7A0370527CA722 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		08E015C13246F4EF3D276806 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0AF375759F68322A3A1E94B2 /* FSKit.framework in Frameworks */,
+				D4ABEC94FBBB6E7A1B1B325C /* ExtensionFoundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CB10952D04FFB0491F5C126F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				034C6A4CB9EDAF636CA34DC5 /* OpenNTFSCore.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		01808FCFCCA4F1FCA337810C = {
+			isa = PBXGroup;
+			children = (
+				B1CB2CA30B7CF8BBA3FDAFC3 /* FSKitExtension */,
+				486078CF180887BF9ECFE520 /* OpenNTFSApp */,
+				D138BBC47EE197F6905097A9 /* OpenNTFSCore */,
+				06E2BE67DD6C1335F03554AA /* Resources */,
+				12812BE995F898DFC4E5AA31 /* Frameworks */,
+				0D038EE80176B57C60A21995 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		06E2BE67DD6C1335F03554AA /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				F7D74026CD7A0370527CA722 /* Assets.xcassets */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		0D038EE80176B57C60A21995 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				4F27075D401CEA1A2647801E /* OpenNTFSApp.app */,
+				C987A8DEB89A5D6E0CFB6831 /* OpenNTFSCore.framework */,
+				A0BB2C90F9DD8CE675C6E0EC /* OpenNTFSFS.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		12812BE995F898DFC4E5AA31 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				DAB59F265C3AC57715FE4102 /* ExtensionFoundation.framework */,
+				D520B73A633253E81A25F3BA /* FSKit.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		486078CF180887BF9ECFE520 /* OpenNTFSApp */ = {
+			isa = PBXGroup;
+			children = (
+				0F0502C9D0AF0CA56281FEA1 /* OpenNTFSApp.swift */,
+			);
+			name = OpenNTFSApp;
+			path = Sources/OpenNTFSApp;
+			sourceTree = "<group>";
+		};
+		B1CB2CA30B7CF8BBA3FDAFC3 /* FSKitExtension */ = {
+			isa = PBXGroup;
+			children = (
+				722F13334E868D8D1C5789FB /* Info.plist */,
+				E0EC3160A15B8057A16474E0 /* OpenNTFSFileSystem.swift */,
+				5C29C14ADAAA4CCEDABC29D5 /* OpenNTFSFileSystemExtension.swift */,
+				7387288B45EE1921132F5B95 /* OpenNTFSFS.entitlements */,
+			);
+			path = FSKitExtension;
+			sourceTree = "<group>";
+		};
+		D138BBC47EE197F6905097A9 /* OpenNTFSCore */ = {
+			isa = PBXGroup;
+			children = (
+				7E8C53C32141F51FBE22BA18 /* BackendDetector.swift */,
+				B889FF814E91DA32D4873A71 /* CommandRunner.swift */,
+				1810F8DEDEE0A01BE5E0278D /* DiskScanner.swift */,
+				B8C6A286B419FEDC44036FF8 /* Models.swift */,
+				47295ECA613251A18859718D /* MountService.swift */,
+				94EDC82A311F9501F8597931 /* NTFSBootSector.swift */,
+				0832AA089617D8E712190EA7 /* RecommendationEngine.swift */,
+				76C3FD9F022F0D864C396641 /* SystemInspector.swift */,
+			);
+			name = OpenNTFSCore;
+			path = Sources/OpenNTFSCore;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		7061615E0C6A4756D0F2EC9B /* OpenNTFSFS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B4F6608095719AE3C9FD671E /* Build configuration list for PBXNativeTarget "OpenNTFSFS" */;
+			buildPhases = (
+				84CAAA3ED1CECB7BF5627269 /* Sources */,
+				08E015C13246F4EF3D276806 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = OpenNTFSFS;
+			packageProductDependencies = (
+			);
+			productName = OpenNTFSFS;
+			productReference = A0BB2C90F9DD8CE675C6E0EC /* OpenNTFSFS.appex */;
+			productType = "com.apple.product-type.extensionkit-extension";
+		};
+		CDF659633E95078ACE736B1D /* OpenNTFSApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B159CDE2754E31C3CD3C53FD /* Build configuration list for PBXNativeTarget "OpenNTFSApp" */;
+			buildPhases = (
+				517310EB6349353E3521210F /* Sources */,
+				0519DFF856D4B8B084BF4083 /* Resources */,
+				CB10952D04FFB0491F5C126F /* Frameworks */,
+				25604CA8526F0451229357AA /* Embed ExtensionKit Extensions */,
+				34CD340E45F25ED73E25212B /* Embed Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				FE0DB8B3E0BB62ADCD8EF924 /* PBXTargetDependency */,
+				6DC59608E7FEC81552EC3A6D /* PBXTargetDependency */,
+			);
+			name = OpenNTFSApp;
+			packageProductDependencies = (
+			);
+			productName = OpenNTFSApp;
+			productReference = 4F27075D401CEA1A2647801E /* OpenNTFSApp.app */;
+			productType = "com.apple.product-type.application";
+		};
+		E1DF289D67A4D444BE8439B7 /* OpenNTFSCore */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2D5628CC29C4E33403933625 /* Build configuration list for PBXNativeTarget "OpenNTFSCore" */;
+			buildPhases = (
+				68AEA9F61104E70A1150D822 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = OpenNTFSCore;
+			packageProductDependencies = (
+			);
+			productName = OpenNTFSCore;
+			productReference = C987A8DEB89A5D6E0CFB6831 /* OpenNTFSCore.framework */;
+			productType = "com.apple.product-type.framework";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		3B718A76C49CAB30414F7CEB /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					7061615E0C6A4756D0F2EC9B = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+					CDF659633E95078ACE736B1D = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+					E1DF289D67A4D444BE8439B7 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 540AD8024B5C77CC1806E404 /* Build configuration list for PBXProject "OpenNTFS" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 01808FCFCCA4F1FCA337810C;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 0D038EE80176B57C60A21995 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				E1DF289D67A4D444BE8439B7 /* OpenNTFSCore */,
+				7061615E0C6A4756D0F2EC9B /* OpenNTFSFS */,
+				CDF659633E95078ACE736B1D /* OpenNTFSApp */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		0519DFF856D4B8B084BF4083 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				629D9059F73E5D6F75F5BE94 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		517310EB6349353E3521210F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CEB7907249C8C16032798BE9 /* OpenNTFSApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		68AEA9F61104E70A1150D822 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F8397783041D21EC5790419B /* BackendDetector.swift in Sources */,
+				ED947E553DE2DCB07536A0AB /* CommandRunner.swift in Sources */,
+				462C300027C573B1999F71C1 /* DiskScanner.swift in Sources */,
+				DC35526064C5B54D55995FB5 /* Models.swift in Sources */,
+				CF27EC7B0355138E5A3F2FB3 /* MountService.swift in Sources */,
+				5982E6B203411FC13FA6520E /* NTFSBootSector.swift in Sources */,
+				922E02965FF5E6E2EC5F0373 /* RecommendationEngine.swift in Sources */,
+				70BCE24C6BF4FCE5A53B68EF /* SystemInspector.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		84CAAA3ED1CECB7BF5627269 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				70807953900DD50136934DA3 /* OpenNTFSFileSystem.swift in Sources */,
+				16EFCF0249E9A0E332B524F5 /* OpenNTFSFileSystemExtension.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		6DC59608E7FEC81552EC3A6D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7061615E0C6A4756D0F2EC9B /* OpenNTFSFS */;
+			targetProxy = 73CCE21607242BB0CC9D1AC0 /* PBXContainerItemProxy */;
+		};
+		FE0DB8B3E0BB62ADCD8EF924 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E1DF289D67A4D444BE8439B7 /* OpenNTFSCore */;
+			targetProxy = 1B603CDE16041B85959229BB /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		076FDB677770AC327ACE62F0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.4;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		07A63EA25BB2FC8B8ED30BB1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "";
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				INFOPLIST_FILE = "XcodeSupport/OpenNTFSCore-Info.plist";
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = cn.openntfs.core;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Release;
+		};
+		4B06C519641B51916D5F0474 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = "XcodeSupport/OpenNTFSApp-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = cn.openntfs.app;
+				PRODUCT_NAME = OpenNTFS;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		5F3B9DCC201F93BB96808D02 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = FSKitExtension/OpenNTFSFS.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = FSKitExtension/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = cn.openntfs.app.fskit;
+				PRODUCT_NAME = OpenNTFSFS;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		6CDEE5216A9F837117F2EBDE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.4;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		87850EFB3FEBBA7F49CFD149 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = "XcodeSupport/OpenNTFSApp-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = cn.openntfs.app;
+				PRODUCT_NAME = OpenNTFS;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		D903A101AC482B21090D6721 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "";
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				INFOPLIST_FILE = "XcodeSupport/OpenNTFSCore-Info.plist";
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = cn.openntfs.core;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Debug;
+		};
+		F46F98ECFA1D5E0FA95C9C86 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = FSKitExtension/OpenNTFSFS.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = FSKitExtension/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = cn.openntfs.app.fskit;
+				PRODUCT_NAME = OpenNTFSFS;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		2D5628CC29C4E33403933625 /* Build configuration list for PBXNativeTarget "OpenNTFSCore" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D903A101AC482B21090D6721 /* Debug */,
+				07A63EA25BB2FC8B8ED30BB1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		540AD8024B5C77CC1806E404 /* Build configuration list for PBXProject "OpenNTFS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				076FDB677770AC327ACE62F0 /* Debug */,
+				6CDEE5216A9F837117F2EBDE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		B159CDE2754E31C3CD3C53FD /* Build configuration list for PBXNativeTarget "OpenNTFSApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4B06C519641B51916D5F0474 /* Debug */,
+				87850EFB3FEBBA7F49CFD149 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		B4F6608095719AE3C9FD671E /* Build configuration list for PBXNativeTarget "OpenNTFSFS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5F3B9DCC201F93BB96808D02 /* Debug */,
+				F46F98ECFA1D5E0FA95C9C86 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 3B718A76C49CAB30414F7CEB /* Project object */;
+}

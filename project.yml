@@ -1,0 +1,86 @@
+name: OpenNTFS
+options:
+  bundleIdPrefix: cn.openntfs
+  deploymentTarget:
+    macOS: "15.4"
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+targets:
+  OpenNTFSCore:
+    type: framework
+    platform: macOS
+    sources:
+      - Sources/OpenNTFSCore
+    info:
+      path: XcodeSupport/OpenNTFSCore-Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: cn.openntfs.core
+        DEFINES_MODULE: YES
+  OpenNTFSFS:
+    type: extensionkit-extension
+    platform: macOS
+    sources:
+      - FSKitExtension
+    info:
+      path: FSKitExtension/Info.plist
+      properties:
+        CFBundleDisplayName: OpenNTFS File System
+        EXAppExtensionAttributes:
+          EXExtensionPointIdentifier: com.apple.fskit.fsmodule
+          FSMediaTypes:
+            Windows_NTFS:
+              FSMediaProperties:
+                Content Hint: Windows_NTFS
+                Leaf: true
+              FSProbeOrder: 1000
+          FSPersonalities:
+            OpenNTFS:
+              FSName: OpenNTFS
+              FSfileObjectsAreCaseSensitive: false
+          FSRequiresSecurityScopedPathURLResources: false
+          FSShortName: openntfs
+          FSSupportsBlockResources: true
+          FSSupportsGenericURLResources: false
+          FSSupportsPathURLs: false
+          FSSupportsServerURLs: false
+    entitlements:
+      path: FSKitExtension/OpenNTFSFS.entitlements
+    dependencies:
+      - sdk: FSKit.framework
+      - sdk: ExtensionFoundation.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: cn.openntfs.app.fskit
+        PRODUCT_NAME: OpenNTFSFS
+        SKIP_INSTALL: YES
+  OpenNTFSApp:
+    type: application
+    platform: macOS
+    sources:
+      - Sources/OpenNTFSApp
+      - Resources/Assets.xcassets
+    info:
+      path: XcodeSupport/OpenNTFSApp-Info.plist
+      properties:
+        CFBundleDisplayName: OpenNTFS
+        LSApplicationCategoryType: public.app-category.utilities
+    dependencies:
+      - target: OpenNTFSCore
+      - target: OpenNTFSFS
+        embed: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: cn.openntfs.app
+        PRODUCT_NAME: OpenNTFS
+schemes:
+  OpenNTFS:
+    build:
+      targets:
+        OpenNTFSApp: all
+        OpenNTFSFS: all
+    run:
+      config: Debug

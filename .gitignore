@@ -1,0 +1,13 @@
+.build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+.DS_Store
+
+# Local generated diagnostics and test artifacts
+*.log
+tmp/
+
+# Local signing and distribution output
+build/
+dist/
