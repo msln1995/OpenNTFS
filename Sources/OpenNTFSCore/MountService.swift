@@ -6,6 +6,7 @@ public enum MountServiceError: Error, LocalizedError, Equatable {
     case unsupportedBackend
     case backendMissing
     case authorizationFailed(String)
+    case ejectFailed(String)
 
     public var errorDescription: String? {
         switch self {
@@ -14,6 +15,7 @@ public enum MountServiceError: Error, LocalizedError, Equatable {
         case .unsupportedBackend: "当前后端尚未实现安全挂载"
         case .backendMissing: "免恢复模式后端尚未安装"
         case .authorizationFailed(let message): message.isEmpty ? "管理员授权被取消或挂载失败" : message
+        case .ejectFailed(let message): message.isEmpty ? "安全推出失败" : message
         }
     }
 }
@@ -103,6 +105,27 @@ public struct MountService: Sendable {
             executable: "/usr/bin/env",
             arguments: privilegeEnvironment + [executable, "unmount", "--wait-for-vm", "/dev/\(volume.id)"]
         )
+    }
+
+    public func safeEject(volume: NTFSVolume) throws -> String {
+        try validate(volume)
+        let mounts = activeMountPoints()
+        if let mountPoint = mounts[volume.id] {
+            let result = try runner.run("/sbin/umount", arguments: [mountPoint])
+            guard result.status == 0 else {
+                throw MountServiceError.ejectFailed(result.stderrString)
+            }
+        }
+
+        let wholeDisk = volume.id.split(separator: "s", maxSplits: 1).first.map(String.init)
+            ?? volume.id
+        let eject = try runner.run("/usr/sbin/diskutil", arguments: ["eject", "/dev/\(wholeDisk)"])
+        guard eject.status == 0 else {
+            throw MountServiceError.ejectFailed(eject.stderrString)
+        }
+        return [eject.stdoutString, eject.stderrString]
+            .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     public func executeAuthorized(_ plan: MountPlan) throws -> String {

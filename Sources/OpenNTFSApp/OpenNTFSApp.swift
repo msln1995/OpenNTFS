@@ -34,6 +34,7 @@ final class AppModel {
     var writeMountPoints: [String: String] = [:]
     var operationMessages: [String: String] = [:]
     var needsFullDiskAccessVolumeIDs: Set<String> = []
+    var ejectingVolumeID: String?
 
     func refresh() async {
         isRefreshing = true
@@ -76,6 +77,21 @@ final class AppModel {
                 needsFullDiskAccessVolumeIDs.insert(volume.id)
                 operationMessages[volume.id] = "需要为 OpenNTFS 开启完全磁盘访问权限，然后重新打开应用。"
             }
+        }
+    }
+
+    func safeEject(volume: NTFSVolume) async {
+        ejectingVolumeID = volume.id
+        operationMessages[volume.id] = "正在安全推出…"
+        defer { ejectingVolumeID = nil }
+        do {
+            _ = try await Task.detached { try MountService().safeEject(volume: volume) }.value
+            writeEnabledVolumeIDs.remove(volume.id)
+            writeMountPoints.removeValue(forKey: volume.id)
+            operationMessages[volume.id] = "已安全推出，可以拔出设备。"
+            await refresh()
+        } catch {
+            operationMessages[volume.id] = error.localizedDescription
         }
     }
 }
@@ -183,6 +199,10 @@ struct ContentView: View {
                             }
                         }
                         .disabled(model.writeMountPoints[volume.id] == nil && volume.mountPoint == nil)
+                        Button("安全推出", systemImage: "eject") {
+                            Task { await model.safeEject(volume: volume) }
+                        }
+                        .disabled(model.ejectingVolumeID != nil || (!writeEnabled && model.writeMountPoints[volume.id] == nil))
                     }
                 }
                 .padding(18)
