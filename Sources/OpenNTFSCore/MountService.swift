@@ -41,22 +41,6 @@ public struct MountPlan: Equatable, Sendable {
         self.targetMountPoint = targetMountPoint
     }
 
-    public var shellCommand: String {
-        let command = ([executable] + arguments).map(Self.shellQuote).joined(separator: " ")
-        guard let readableDevicePath else { return command }
-        let path = Self.shellQuote(readableDevicePath)
-        let preflight = "test -r \(path) || { echo OPENNTFS_FULL_DISK_ACCESS_REQUIRED; exit 77; }"
-        guard releaseMountedDeviceFirst else {
-            return "\(preflight); \(command)"
-        }
-        let unmount = "/usr/sbin/diskutil unmount \(path)"
-        let restore = "/usr/sbin/diskutil mount \(path) >/dev/null 2>&1"
-        return "\(unmount) && \(preflight) && \(command) || { rc=$?; \(restore); exit $rc; }"
-    }
-
-    private static func shellQuote(_ value: String) -> String {
-        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
-    }
 }
 
 public struct MountService: Sendable {
@@ -80,6 +64,21 @@ public struct MountService: Sendable {
         let mountPoint = mountRoot
             .appendingPathComponent("OpenNTFS-\(volume.id)", isDirectory: true)
 
+        // 1. 使用 Linux 内核态 ntfs3，避免用户态 FUSE 的额外上下文切换。
+        // 2. NFS 服务端异步导出，避免每次 RPC 写都同步落盘。
+        // 3. 1MB 的客户端读写块减少 RPC 往返次数。
+        // 不附加 -o force：休眠或脏 NTFS 卷必须拒绝写入，而不是绕过一致性检查。
+        // 客户端 async 与 locallocks 在这里无效：macOS 默认禁用客户端 async，
+        // 且 anylinuxfs 会固定合并 nolocks，无法通过 -n 覆盖。
+        let 性能优化参数: [String] = [
+            "-t",
+            "ntfs3",
+            "--nfs-export-opts",
+            "rw,async,no_subtree_check,no_root_squash,insecure",
+            "-n",
+            "wsize=1048576,rsize=1048576,tcp",
+        ]
+
         return MountPlan(
             executable: "/usr/bin/env",
             arguments: privilegeEnvironment + [
@@ -87,6 +86,7 @@ public struct MountService: Sendable {
                 "mount",
                 "--window",
                 "false",
+            ] + 性能优化参数 + [
                 "/dev/\(volume.id)",
                 mountPoint.path,
             ],
@@ -107,28 +107,54 @@ public struct MountService: Sendable {
         )
     }
 
+    public static func wholeDiskIdentifier(for volumeID: String) -> String? {
+        guard let match = volumeID.wholeMatch(of: #/^(disk[0-9]+)s[0-9]+$/#) else {
+            return nil
+        }
+        return String(match.1)
+    }
+
+    public static func parseStatus(_ output: String) -> [String: String] {
+        var mounts: [String: String] = [:]
+        for line in output.split(separator: "\n").map(String.init) {
+            guard let match = line.wholeMatch(of: #/^\/dev\/(disk[0-9]+s[0-9]+) on (.+) \(.+$/#) else {
+                continue
+            }
+            mounts[String(match.1)] = String(match.2)
+        }
+        return mounts
+    }
+
     public func safeEject(volume: NTFSVolume) throws -> String {
         try validate(volume)
-        let mounts = activeMountPoints()
-        if let mountPoint = mounts[volume.id] {
-            let result = try runner.run("/sbin/umount", arguments: [mountPoint])
-            guard result.status == 0 else {
-                throw MountServiceError.ejectFailed(result.stderrString)
+
+        var messages: [String] = []
+        if activeMountPoints()[volume.id] != nil {
+            let unmountPlan = try planDisableWrite(volume: volume)
+            let output = try executeAuthorized(unmountPlan)
+            if !output.isEmpty {
+                messages.append(output)
             }
         }
 
-        let wholeDisk = volume.id.split(separator: "s", maxSplits: 1).first.map(String.init)
-            ?? volume.id
+        guard let wholeDisk = Self.wholeDiskIdentifier(for: volume.id) else {
+            throw MountServiceError.invalidDeviceIdentifier
+        }
         let eject = try runner.run("/usr/sbin/diskutil", arguments: ["eject", "/dev/\(wholeDisk)"])
         guard eject.status == 0 else {
             throw MountServiceError.ejectFailed(eject.stderrString)
         }
-        return [eject.stdoutString, eject.stderrString]
+        messages.append(contentsOf: [eject.stdoutString, eject.stderrString])
+        return messages
             .joined(separator: "\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     public func executeAuthorized(_ plan: MountPlan) throws -> String {
+        if plan.targetMountPoint != nil {
+            优化虚拟机硬件配置()
+        }
+
         if let targetMountPoint = plan.targetMountPoint {
             do {
                 try FileManager.default.createDirectory(
@@ -166,12 +192,21 @@ public struct MountService: Sendable {
         }
     }
 
+    // 这是 anylinuxfs 的全局配置，会影响该用户之后的所有挂载；仅在挂载时调整。
+    // 默认 1 核/512MB 在网络中断和脏页回收时容易成为瓶颈，这里提升到 4 核/2048MB。
+    public func 优化虚拟机硬件配置() {
+        let 可执行路径 = ["/opt/homebrew/bin/anylinuxfs", "/usr/local/bin/anylinuxfs"]
+            .first { FileManager.default.fileExists(atPath: $0) }
+        guard let 可执行路径 else { return }
+        _ = try? runner.run(可执行路径, arguments: ["config", "-n", "4", "-r", "2048"])
+    }
+
     private func runWithSudoAskpass(_ plan: MountPlan) throws -> CommandResult {
         let askpassURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("openntfs-askpass-\(UUID().uuidString).sh")
         let script = """
         #!/bin/sh
-        /usr/bin/osascript -e 'tell application "System Events" to display dialog "OpenNTFS 需要管理员权限来挂载磁盘。" & return & return & "请输入登录密码：" with hidden answer default answer "" buttons {"取消", "确定"} default button "确定" with title "OpenNTFS 授权" with icon caution' -e 'text returned of result' 2>/dev/null
+        /usr/bin/osascript -e 'tell application "System Events" to display dialog "OpenNTFS 需要管理员权限来挂载或卸载磁盘。" & return & return & "请输入登录密码：" with hidden answer default answer "" buttons {"取消", "确定"} default button "确定" with title "OpenNTFS 授权" with icon caution' -e 'text returned of result' 2>/dev/null
         """
         try Data(script.utf8).write(to: askpassURL, options: [.atomic])
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: askpassURL.path)
@@ -180,13 +215,12 @@ public struct MountService: Sendable {
         let process = Process()
         let output = Pipe()
         let error = Pipe()
-        let input = Pipe()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/sudo")
         process.arguments = ["-A", "--", plan.executable] + plan.arguments
         var environment = ProcessInfo.processInfo.environment
         environment["SUDO_ASKPASS"] = askpassURL.path
         process.environment = environment
-        process.standardInput = input
+        process.standardInput = FileHandle.nullDevice
         process.standardOutput = output
         process.standardError = error
         try process.run()
@@ -212,14 +246,7 @@ public struct MountService: Sendable {
             return [:]
         }
 
-        var mounts: [String: String] = [:]
-        for line in result.stdoutString.split(separator: "\n").map(String.init) {
-            guard let match = line.wholeMatch(of: #/^\/dev\/(disk[0-9]+s[0-9]+) on (.+) \(.+$/#) else {
-                continue
-            }
-            mounts[String(match.1)] = String(match.2)
-        }
-        return mounts
+        return Self.parseStatus(result.stdoutString)
     }
 
     private var privilegeEnvironment: [String] {

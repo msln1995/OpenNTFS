@@ -24,21 +24,25 @@ public struct DiskScanner: Sendable {
         guard result.status == 0 else {
             throw DiskScannerError.commandFailed(result.stderrString)
         }
-        guard let root = try PropertyListSerialization.propertyList(from: result.stdout, format: nil) as? [String: Any],
+        return try Self.parseVolumes(from: result.stdout)
+    }
+
+    public static func parseVolumes(from data: Data) throws -> [NTFSVolume] {
+        guard let root = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
               let disks = root["AllDisksAndPartitions"] as? [[String: Any]] else {
             throw DiskScannerError.invalidPropertyList
         }
 
         return disks.flatMap { disk -> [NTFSVolume] in
-            let internalDisk = disk["OSInternal"] as? Bool ?? false
+            let diskIsInternal = disk["OSInternal"] as? Bool ?? false
             let partitions = disk["Partitions"] as? [[String: Any]] ?? []
             return partitions.compactMap { partition in
                 guard partition["Content"] as? String == "Windows_NTFS",
-                      let identifier = partition["DeviceIdentifier"] as? String else {
+                      let identifier = parseString(partition["DeviceIdentifier"]) else {
                     return nil
                 }
-                let name = partition["VolumeName"] as? String ?? identifier
-                let mountPoint = partition["MountPoint"] as? String
+                let name = parseString(partition["VolumeName"]) ?? identifier
+                let mountPoint = parseString(partition["MountPoint"])
                 let size = (partition["Size"] as? NSNumber)?.int64Value ?? 0
                 let writable = mountPoint.map(isMountWritable) ?? false
                 return NTFSVolume(
@@ -47,13 +51,24 @@ public struct DiskScanner: Sendable {
                     mountPoint: mountPoint,
                     size: size,
                     isWritable: writable,
-                    isInternal: internalDisk
+                    isInternal: partition["OSInternal"] as? Bool ?? diskIsInternal
                 )
             }
         }
     }
 
-    private func isMountWritable(_ mountPoint: String) -> Bool {
-        FileManager.default.isWritableFile(atPath: mountPoint)
+    private static func parseString(_ value: Any?) -> String? {
+        guard let string = value as? String else { return nil }
+        let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func isMountWritable(_ mountPoint: String) -> Bool {
+        guard let values = try? URL(fileURLWithPath: mountPoint)
+            .resourceValues(forKeys: [.volumeIsReadOnlyKey]),
+              let isReadOnly = values.volumeIsReadOnly else {
+            return false
+        }
+        return !isReadOnly
     }
 }

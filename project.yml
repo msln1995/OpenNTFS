@@ -8,6 +8,8 @@ settings:
     SWIFT_VERSION: "6.0"
     DEVELOPMENT_TEAM: ""
     CODE_SIGN_STYLE: Automatic
+    MARKETING_VERSION: 0.1.2
+    CURRENT_PROJECT_VERSION: 2
 targets:
   OpenNTFSCore:
     type: framework
@@ -16,10 +18,14 @@ targets:
       - Sources/OpenNTFSCore
     info:
       path: XcodeSupport/OpenNTFSCore-Info.plist
+      properties:
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cn.openntfs.core
         DEFINES_MODULE: YES
+        CURRENT_PROJECT_VERSION: 2
   OpenNTFSFS:
     type: extensionkit-extension
     platform: macOS
@@ -29,6 +35,8 @@ targets:
       path: FSKitExtension/Info.plist
       properties:
         CFBundleDisplayName: OpenNTFS File System
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         EXAppExtensionAttributes:
           EXExtensionPointIdentifier: com.apple.fskit.fsmodule
           FSMediaTypes:
@@ -67,7 +75,10 @@ targets:
       path: XcodeSupport/OpenNTFSApp-Info.plist
       properties:
         CFBundleDisplayName: OpenNTFS
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.utilities
+        NSAppleEventsUsageDescription: OpenNTFS 需要控制系统事件来显示管理员授权对话框。
     dependencies:
       - target: OpenNTFSCore
       - target: OpenNTFSFS

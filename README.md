@@ -12,28 +12,41 @@ OpenNTFS 是一个面向 macOS 的开源 NTFS 写入助手。它优先使用隔�
 - SwiftUI 主应用、菜单栏入口和诊断 CLI；
 - `anylinuxfs` microVM 后端的管理员授权、失败回滚和真实 NTFS 镜像读写；
 - macOS 27 beta 上的中文卷标兼容处理：内部 NFS 导出名使用 ASCII，真实卷标不变；
-- 17 项 OpenNTFS 自检，以及 Xcode 应用构建。
+- OpenNTFS 自检、XCTest 回归测试，以及 Xcode 应用构建。
 
-尚未完成：
+尚未完成或仍需验证：
 
 - FSKit 扩展目前只是安全骨架，不能独立接管 NTFS；
 - macFUSE/NTFS-3G 仅作为兼容路径检测，不会自动切换正在使用的驱动；
-- 应用内“安全推出”流程仍需继续完善。退出前请使用后端提供的卸载命令，确认挂载消失后再拔盘。
+- `ntfs3`、NFS 异步导出与 1MB 读写块的组合尚未在真实 NTFS 卷上完成吞吐和稳定性对比，目前不应据此宣称性能提升；
+- 应用内安全推出已改为先卸载 microVM、再推出整盘，但尚未在真实设备上完成回归测试。拔盘前仍请用 `anylinuxfs status` 确认挂载已消失。
+
+## 系统要求
+
+- Apple Silicon Mac（arm64）。`anylinuxfs` 官方仅支持 Apple Silicon，Intel Mac 不在支持范围；
+- macOS 15.4 或更新。当前构建和自动测试在 macOS 27.2 上完成，其他系统版本仍需实机验证；
+- [Homebrew](https://brew.sh/) 和 `anylinuxfs`。`anylinuxfs 0.18.0` 已验证，更新版本尚未验证；
+- 启用写入需要管理员授权。如果磁盘访问被拒绝，需要为 OpenNTFS 开启完全磁盘访问权限。
 
 ## 用户安装
 
-当前版本没有签名公证包。开发测试步骤：
-
-1. 安装 [Homebrew](https://brew.sh/) 和 `anylinuxfs`：
+1. 安装 `anylinuxfs`：
 
    ```bash
    brew tap nohajc/anylinuxfs
    brew install anylinuxfs
    ```
 
-2. 在“系统设置 → 隐私与安全性 → 完全磁盘访问权限”中加入构建出的 `OpenNTFS.app`。
-3. 启动应用，确认设备显示为只读后点击“启用写入”。
-4. 成功后，实际挂载点通常是 `~/Volumes/OpenNTFS-diskXsY`，可用以下命令核验：
+2. 从 [GitHub Releases](https://github.com/msln1995/OpenNTFS/releases) 下载 DMG，把 `OpenNTFS.app` 拖入“应用程序”。
+3. 当前发布包使用 ad-hoc 签名，未经 Apple 公证。首次启动若被 Gatekeeper 拦截，请右键应用选择“打开”；如果仍然被阻止，可仅对官方下载的副本执行：
+
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/OpenNTFS.app
+   ```
+
+4. 启动应用，确认设备显示为只读后点击“启用写入”。
+5. 如果应用提示磁盘访问被拒绝，再到“系统设置 → 隐私与安全性 → 完全磁盘访问权限”中加入 `OpenNTFS.app`，重新打开应用后重试。
+6. 成功后，实际挂载点通常是 `~/Volumes/OpenNTFS-diskXsY`，可用以下命令核验：
 
    ```bash
    anylinuxfs status
@@ -48,6 +61,7 @@ OpenNTFS 是一个面向 macOS 的开源 NTFS 写入助手。它优先使用隔�
 
 ```bash
 swift run openntfs-selftest
+swift test
 swift run openntfs --json
 
 xcodegen generate
@@ -66,12 +80,14 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
 4. 管理员密码通过临时 `SUDO_ASKPASS` 脚本输入，不把密码写入日志或命令行参数。
 5. 不自动降低 SIP、启动安全策略或要求恢复模式。
 6. 应用显示“可写”前会重新读取后端状态，而不是仅依据命令退出码。
+7. 写入计划不附加 `-o force`，休眠或脏 NTFS 卷会保持拒绝写入。
+8. 安全推出先通过 `anylinuxfs unmount --wait-for-vm` 停止 microVM，再推出整盘；任一步失败都不会继续拔盘流程。
 
 ## 已知限制
 
 - `anylinuxfs` 使用 NFS 映射，部分应用对网络挂载的文件锁、扩展属性或原子替换支持不完整。
 - macOS 对非 ASCII NFS 路径存在兼容问题，因此内部挂载目录使用 ASCII 别名。
-- NTFS 卷如果处于 Windows 休眠/快速启动状态，不应强行写入。
+- NTFS 卷如果处于 Windows 休眠/快速启动状态，不应写入。OpenNTFS 不会用 `-o force` 绕过该限制，请先在 Windows 中安全弹出或完全关机。
 - 这是用户态工具，不等同于经过 Apple 签名公证的商业文件系统驱动。
 
 ## 项目结构
@@ -79,7 +95,8 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
 - `Sources/OpenNTFSCore`：磁盘检测、后端判断、挂载计划和回滚逻辑；
 - `Sources/OpenNTFSApp`：SwiftUI 应用和菜单栏界面；
 - `Sources/OpenNTFSCLI`：JSON/文本诊断命令；
-- `Sources/OpenNTFSSelfTest`：不接触真实磁盘的安全回归测试；
+- `Sources/OpenNTFSSelfTest`：不接触真实磁盘的安全回归自检；
+- `Tests/OpenNTFSCoreTests`：XCTest 单元测试；
 - `FSKitExtension`：未来 FSKit 实现的受限扩展骨架；
 - `Resources`：App Icon 和菜单栏图标资源。
 

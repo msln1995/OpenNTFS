@@ -38,27 +38,34 @@ public struct RecommendationEngine: Sendable {
             )
         }
 
-        let priority: [BackendKind] = [.nativeFSKit, .fuseT, .microVM, .macFUSE]
-        if let backend = priority.compactMap({ kind in
-            capabilities.first(where: { $0.kind == kind && $0.ready })
-        }).first {
+        let readyBackends = capabilities.filter { $0.ready && $0.kind != .unavailable }
+        if let backend = readyBackends.first(where: { $0.kind.supportsWrite }) {
             return VolumeRecommendation(
                 volumeID: volume.id,
                 backend: backend.kind,
                 safety: .safe,
                 title: "可以使用\(backend.kind.displayName)",
-                explanation: backend.kind.requiresRecoveryMode
-                    ? "此模式可能要求修改系统扩展设置，只在你主动选择兼容模式时使用。"
-                    : "此模式不要求进入恢复模式，也不会降低系统安全设置。"
+                explanation: "此模式不要求进入恢复模式，也不会降低系统安全设置。"
             )
         }
 
+        if readyBackends.isEmpty {
+            return VolumeRecommendation(
+                volumeID: volume.id,
+                backend: .unavailable,
+                safety: .readOnly,
+                title: "目前保持只读最安全",
+                explanation: "尚未安装无需恢复模式的写入后端。应用不会静默修改系统设置。"
+            )
+        }
+
+        let names = readyBackends.map(\.kind.displayName).joined(separator: "、")
         return VolumeRecommendation(
             volumeID: volume.id,
             backend: .unavailable,
             safety: .readOnly,
-            title: "目前保持只读最安全",
-            explanation: "尚未安装无需恢复模式的写入后端。应用不会静默修改系统设置。"
+            title: "当前版本暂无可用的写入后端",
+            explanation: "已检测到\(names)，但当前版本只实现了隔离兼容模式的写入路径，因此保持只读。"
         )
     }
 }

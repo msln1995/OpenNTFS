@@ -15,5 +15,6 @@ let package = Package(
         .executableTarget(name: "OpenNTFSCLI", dependencies: ["OpenNTFSCore"]),
         .executableTarget(name: "OpenNTFSSelfTest", dependencies: ["OpenNTFSCore"]),
         .executableTarget(name: "OpenNTFSApp", dependencies: ["OpenNTFSCore"]),
+        .testTarget(name: "OpenNTFSCoreTests", dependencies: ["OpenNTFSCore"]),
     ]
 )

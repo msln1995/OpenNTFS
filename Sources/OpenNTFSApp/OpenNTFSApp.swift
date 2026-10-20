@@ -71,11 +71,13 @@ final class AppModel {
             needsFullDiskAccessVolumeIDs.remove(volume.id)
         } catch {
             writeEnabledVolumeIDs.remove(volume.id)
-            operationMessages[volume.id] = error.localizedDescription
-            if error.localizedDescription.contains("OPENNTFS_FULL_DISK_ACCESS_REQUIRED") ||
-                error.localizedDescription.localizedCaseInsensitiveContains("insufficient permissions") {
+            let message = error.localizedDescription
+            operationMessages[volume.id] = message
+            if message.localizedCaseInsensitiveContains("operation not permitted") ||
+                message.localizedCaseInsensitiveContains("permission denied") ||
+                message.localizedCaseInsensitiveContains("insufficient permissions") {
                 needsFullDiskAccessVolumeIDs.insert(volume.id)
-                operationMessages[volume.id] = "需要为 OpenNTFS 开启完全磁盘访问权限，然后重新打开应用。"
+                operationMessages[volume.id] = "磁盘访问被拒绝。请检查完全磁盘访问权限和 anylinuxfs 安装状态，然后重试。"
             }
         }
     }
@@ -92,6 +94,7 @@ final class AppModel {
             await refresh()
         } catch {
             operationMessages[volume.id] = error.localizedDescription
+            await refresh()
         }
     }
 }
@@ -202,7 +205,7 @@ struct ContentView: View {
                         Button("安全推出", systemImage: "eject") {
                             Task { await model.safeEject(volume: volume) }
                         }
-                        .disabled(model.ejectingVolumeID != nil || (!writeEnabled && model.writeMountPoints[volume.id] == nil))
+                        .disabled(model.ejectingVolumeID != nil || model.mountingVolumeID != nil)
                     }
                 }
                 .padding(18)

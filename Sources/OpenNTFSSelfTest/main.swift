@@ -2,9 +2,11 @@ import Foundation
 import OpenNTFSCore
 
 var failures: [String] = []
+var checkCount = 0
 
 @MainActor
 func check(_ condition: @autoclosure () -> Bool, _ message: String) {
+    checkCount += 1
     if condition() {
         print("PASS: \(message)")
     } else {
@@ -27,10 +29,19 @@ let readyBackends = [
     BackendCapability(kind: .macFUSE, installed: true, ready: true, detail: "ready"),
 ]
 
-let preferred = engine.recommend(volume: externalVolume, capabilities: readyBackends, conflicts: [])
-check(preferred.backend == .nativeFSKit, "FSKit wins over recovery-mode backends")
-check(preferred.safety == .safe, "a verified FSKit backend is considered safe")
-check(!preferred.backend.requiresRecoveryMode, "the default backend never requires Recovery Mode")
+let unimplemented = engine.recommend(volume: externalVolume, capabilities: readyBackends, conflicts: [])
+check(unimplemented.backend == .unavailable, "detected but unimplemented backends stay read-only")
+check(unimplemented.safety == .readOnly, "an unimplemented backend is not advertised as writable")
+
+let microVMReady = engine.recommend(
+    volume: externalVolume,
+    capabilities: readyBackends + [
+        BackendCapability(kind: .microVM, installed: true, ready: true, detail: "ready"),
+    ],
+    conflicts: []
+)
+check(microVMReady.backend == .microVM, "microVM is the only recommended write backend")
+check(microVMReady.safety == .safe, "a verified microVM backend is considered safe")
 
 let conflict = engine.recommend(
     volume: externalVolume,
@@ -77,11 +88,78 @@ check(plan.arguments.contains(expectedMountPoint), "write plan uses an ASCII use
 check(plan.targetMountPoint == expectedMountPoint, "write plan prepares the explicit NFS mount point")
     check(!plan.arguments.contains("--ignore-permissions"), "write plan avoids the macOS 27 permission-bypass hang")
 check(plan.arguments.contains("/dev/disk9s1"), "write plan uses the validated device node")
-    check(plan.readableDevicePath == "/dev/disk9s1", "write plan checks Full Disk Access before mounting")
+    check(plan.readableDevicePath == "/dev/disk9s1", "write plan keeps the device path for safe rollback")
     check(plan.releaseMountedDeviceFirst, "write plan releases the Apple read-only mount before probing")
-    check(plan.shellCommand.contains("diskutil mount"), "write plan restores the read-only mount after failure")
+    check(plan.arguments.contains("ntfs3"), "write plan prioritizes Linux in-kernel ntfs3 driver")
+    check(!plan.arguments.contains("force"), "write plan never forces hibernated or dirty NTFS volumes")
+    check(plan.arguments.contains("--nfs-export-opts"), "write plan configures asynchronous NFS export")
+    let nfsOptionIndex = plan.arguments.firstIndex(of: "-n")
+    let nfsOptions = nfsOptionIndex.map { plan.arguments[$0 + 1] } ?? ""
+    check(nfsOptions == "wsize=1048576,rsize=1048576,tcp", "write plan omits ineffective client async and locking flags")
 } catch {
     check(false, "microVM write plan is available")
+}
+
+let wholeDiskCases = ["disk4s1": "disk4", "disk10s12": "disk10"]
+for (volumeID, expectedDisk) in wholeDiskCases {
+    check(
+        MountService.wholeDiskIdentifier(for: volumeID) == expectedDisk,
+        "whole-disk identifier for \(volumeID) is \(expectedDisk)"
+    )
+}
+check(MountService.wholeDiskIdentifier(for: "disk4") == nil, "whole-disk parser rejects a disk without partition")
+check(MountService.wholeDiskIdentifier(for: "/dev/disk4s1") == nil, "whole-disk parser rejects a path")
+
+let statusOutput = """
+/dev/disk4s1 on /Users/test/Volumes/OpenNTFS-disk4s1 (nfs,nodev,nosuid,mounted by test) VM[cpus: 4, ram: 2048 MiB]
+unrelated output
+"""
+let parsedMounts = MountService.parseStatus(statusOutput)
+check(parsedMounts.count == 1, "anylinuxfs status parser ignores unrelated lines")
+check(
+    parsedMounts["disk4s1"] == "/Users/test/Volumes/OpenNTFS-disk4s1",
+    "anylinuxfs status parser reads the active NFS mount point"
+)
+
+let diskListPlist: [String: Any] = [
+    "AllDisksAndPartitions": [
+        [
+            "OSInternal": false,
+            "Partitions": [
+                [
+                    "Content": "Windows_NTFS",
+                    "DeviceIdentifier": "disk1s1",
+                    "VolumeName": "Windows",
+                    "MountPoint": "/Volumes/Windows",
+                    "Size": 1_000,
+                    "OSInternal": true,
+                ],
+                [
+                    "Content": "Windows_NTFS",
+                    "DeviceIdentifier": "disk9s1",
+                    "VolumeName": "   ",
+                    "MountPoint": "",
+                    "Size": 2_000,
+                    "OSInternal": false,
+                ],
+            ],
+        ],
+    ],
+]
+do {
+    let data = try PropertyListSerialization.data(
+        fromPropertyList: diskListPlist,
+        format: .xml,
+        options: 0
+    )
+    let volumes = try DiskScanner.parseVolumes(from: data)
+    check(volumes.count == 2, "disk scanner parses NTFS partitions")
+    check(volumes.first?.isInternal == true, "disk scanner reads OSInternal at the partition level")
+    check(volumes.last?.isInternal == false, "external partitions stay eligible for writes")
+    check(volumes.last?.name == "disk9s1", "blank volume labels fall back to the device identifier")
+    check(volumes.last?.mountPoint == nil, "empty mount point values are ignored")
+} catch {
+    check(false, "disk scanner parses the diskutil property list")
 }
 let invalidVolume = NTFSVolume(
     id: "disk9s1;touch /tmp/bad",
@@ -101,7 +179,7 @@ do {
 }
 
 if failures.isEmpty {
-    print("OpenNTFS self-test passed (17 checks)")
+    print("OpenNTFS self-test passed (\(checkCount) checks)")
 } else {
     FileHandle.standardError.write(Data("OpenNTFS self-test failed: \(failures.joined(separator: ", "))\n".utf8))
     exit(1)

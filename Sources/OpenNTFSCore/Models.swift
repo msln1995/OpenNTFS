@@ -45,6 +45,10 @@ public enum BackendKind: String, Codable, CaseIterable, Sendable {
     public var requiresRecoveryMode: Bool {
         self == .macFUSE
     }
+
+    public var supportsWrite: Bool {
+        self == .microVM
+    }
 }
 
 public struct BackendCapability: Codable, Equatable, Sendable {
