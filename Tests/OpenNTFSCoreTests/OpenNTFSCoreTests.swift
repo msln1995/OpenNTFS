@@ -175,6 +175,51 @@ final class OpenNTFSCoreTests: XCTestCase {
         }
     }
 
+    func testRunnerDrainsLargeStdoutAndStderrWithoutDeadlock() throws {
+        let box = ResultBox()
+        let finished = expectation(description: "runner finished")
+        DispatchQueue.global(qos: .userInitiated).async {
+            box.store(Result {
+                try ProcessCommandRunner().run(
+                    "/bin/sh",
+                    arguments: [
+                        "-c",
+                        "head -c 200000 /dev/zero; head -c 200000 /dev/zero >&2",
+                    ]
+                )
+            })
+            finished.fulfill()
+        }
+
+        wait(for: [finished], timeout: 10)
+
+        let result = try XCTUnwrap(box.load()).get()
+        XCTAssertEqual(result.status, 0)
+        XCTAssertEqual(result.stdout.count, 200_000)
+        XCTAssertEqual(result.stderr.count, 200_000)
+    }
+
+    func testSafeEjectAbortsWhenStatusCannotBeRead() throws {
+        try XCTSkipUnless(
+            FileManager.default.fileExists(atPath: "/opt/homebrew/bin/anylinuxfs") ||
+                FileManager.default.fileExists(atPath: "/usr/local/bin/anylinuxfs"),
+            "anylinuxfs is not installed"
+        )
+
+        let runner = RecordingFailingRunner()
+        let service = MountService(runner: runner)
+
+        XCTAssertThrowsError(try service.safeEject(volume: testVolume())) { error in
+            guard case .ejectFailed(let message) = error as? MountServiceError else {
+                return XCTFail("unexpected error: \(error)")
+            }
+            XCTAssertTrue(message.contains("已取消推出"))
+        }
+
+        XCTAssertEqual(runner.invocations.count, 1)
+        XCTAssertTrue(runner.invocations[0].hasSuffix("/anylinuxfs status"))
+    }
+
     private func testVolume() -> NTFSVolume {
         NTFSVolume(
             id: "disk9s1",
@@ -183,6 +228,45 @@ final class OpenNTFSCoreTests: XCTestCase {
             size: 1_000,
             isWritable: false,
             isInternal: false
+        )
+    }
+}
+
+private final class ResultBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: Result<CommandResult, Error>?
+
+    func store(_ result: Result<CommandResult, Error>) {
+        lock.lock()
+        storage = result
+        lock.unlock()
+    }
+
+    func load() -> Result<CommandResult, Error>? {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
+}
+
+private final class RecordingFailingRunner: CommandRunning, @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [String] = []
+
+    var invocations: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
+
+    func run(_ executable: String, arguments: [String]) throws -> CommandResult {
+        lock.lock()
+        storage.append(([executable] + arguments).joined(separator: " "))
+        lock.unlock()
+        return CommandResult(
+            status: 1,
+            stdout: Data(),
+            stderr: Data("status unavailable".utf8)
         )
     }
 }

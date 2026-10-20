@@ -53,9 +53,9 @@ public struct MountService: Sendable {
     public func planEnableWrite(volume: NTFSVolume, backend: BackendKind) throws -> MountPlan {
         try validate(volume)
         guard backend == .microVM else { throw MountServiceError.unsupportedBackend }
-        let executable = ["/opt/homebrew/bin/anylinuxfs", "/usr/local/bin/anylinuxfs"]
-            .first { FileManager.default.fileExists(atPath: $0) }
-        guard let executable else { throw MountServiceError.backendMissing }
+        guard let executable = Self.anylinuxfsExecutable() else {
+            throw MountServiceError.backendMissing
+        }
 
         // Running anylinuxfs through sudo changes its default mount root to /Volumes.
         // An explicit user-owned target also keeps the NFS mount attributed to this app.
@@ -98,9 +98,9 @@ public struct MountService: Sendable {
 
     public func planDisableWrite(volume: NTFSVolume) throws -> MountPlan {
         try validate(volume)
-        let executable = ["/opt/homebrew/bin/anylinuxfs", "/usr/local/bin/anylinuxfs"]
-            .first { FileManager.default.fileExists(atPath: $0) }
-        guard let executable else { throw MountServiceError.backendMissing }
+        guard let executable = Self.anylinuxfsExecutable() else {
+            throw MountServiceError.backendMissing
+        }
         return MountPlan(
             executable: "/usr/bin/env",
             arguments: privilegeEnvironment + [executable, "unmount", "--wait-for-vm", "/dev/\(volume.id)"]
@@ -129,7 +129,7 @@ public struct MountService: Sendable {
         try validate(volume)
 
         var messages: [String] = []
-        if activeMountPoints()[volume.id] != nil {
+        if try verifiedActiveMountPoints()[volume.id] != nil {
             let unmountPlan = try planDisableWrite(volume: volume)
             let output = try executeAuthorized(unmountPlan)
             if !output.isEmpty {
@@ -195,9 +195,7 @@ public struct MountService: Sendable {
     // 这是 anylinuxfs 的全局配置，会影响该用户之后的所有挂载；仅在挂载时调整。
     // 默认 1 核/512MB 在网络中断和脏页回收时容易成为瓶颈，这里提升到 4 核/2048MB。
     public func 优化虚拟机硬件配置() {
-        let 可执行路径 = ["/opt/homebrew/bin/anylinuxfs", "/usr/local/bin/anylinuxfs"]
-            .first { FileManager.default.fileExists(atPath: $0) }
-        guard let 可执行路径 else { return }
+        guard let 可执行路径 = Self.anylinuxfsExecutable() else { return }
         _ = try? runner.run(可执行路径, arguments: ["config", "-n", "4", "-r", "2048"])
     }
 
@@ -213,23 +211,13 @@ public struct MountService: Sendable {
         defer { try? FileManager.default.removeItem(at: askpassURL) }
 
         let process = Process()
-        let output = Pipe()
-        let error = Pipe()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/sudo")
         process.arguments = ["-A", "--", plan.executable] + plan.arguments
         var environment = ProcessInfo.processInfo.environment
         environment["SUDO_ASKPASS"] = askpassURL.path
         process.environment = environment
         process.standardInput = FileHandle.nullDevice
-        process.standardOutput = output
-        process.standardError = error
-        try process.run()
-        process.waitUntilExit()
-        return CommandResult(
-            status: process.terminationStatus,
-            stdout: output.fileHandleForReading.readDataToEndOfFile(),
-            stderr: error.fileHandleForReading.readDataToEndOfFile()
-        )
+        return try ProcessCapture.run(process)
     }
 
     private func restoreReadOnlyMount(for plan: MountPlan) {
@@ -238,15 +226,38 @@ public struct MountService: Sendable {
     }
 
     public func activeMountPoints() -> [String: String] {
-        let executable = ["/opt/homebrew/bin/anylinuxfs", "/usr/local/bin/anylinuxfs"]
-            .first { FileManager.default.fileExists(atPath: $0) }
-        guard let executable,
+        guard let executable = Self.anylinuxfsExecutable(),
               let result = try? runner.run(executable, arguments: ["status"]),
               result.status == 0 else {
             return [:]
         }
 
         return Self.parseStatus(result.stdoutString)
+    }
+
+    private func verifiedActiveMountPoints() throws -> [String: String] {
+        guard let executable = Self.anylinuxfsExecutable() else { return [:] }
+
+        let result: CommandResult
+        do {
+            result = try runner.run(executable, arguments: ["status"])
+        } catch {
+            throw MountServiceError.ejectFailed(
+                "无法确认 anylinuxfs 状态，已取消推出：\(error.localizedDescription)"
+            )
+        }
+        guard result.status == 0 else {
+            let detail = result.stderrString.trimmingCharacters(in: .whitespacesAndNewlines)
+            throw MountServiceError.ejectFailed(
+                detail.isEmpty ? "无法确认 anylinuxfs 状态，已取消推出。" : "无法确认 anylinuxfs 状态，已取消推出：\(detail)"
+            )
+        }
+        return Self.parseStatus(result.stdoutString)
+    }
+
+    private static func anylinuxfsExecutable() -> String? {
+        ["/opt/homebrew/bin/anylinuxfs", "/usr/local/bin/anylinuxfs"]
+            .first { FileManager.default.fileExists(atPath: $0) }
     }
 
     private var privilegeEnvironment: [String] {
