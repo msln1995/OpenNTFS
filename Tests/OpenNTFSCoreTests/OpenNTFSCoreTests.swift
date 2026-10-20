@@ -145,8 +145,14 @@ final class OpenNTFSCoreTests: XCTestCase {
         let optionIndex = try XCTUnwrap(plan.arguments.firstIndex(of: "-n"))
         XCTAssertEqual(plan.arguments[optionIndex + 1], "wsize=1048576,rsize=1048576,tcp")
         XCTAssertTrue(plan.arguments.contains("/dev/disk9s1"))
+        let targetMountPoint = try XCTUnwrap(plan.targetMountPoint)
+        let terminatorIndex = try XCTUnwrap(plan.arguments.firstIndex(of: "--"))
         XCTAssertEqual(
-            plan.targetMountPoint,
+            Array(plan.arguments.dropFirst(terminatorIndex + 1)),
+            ["/dev/disk9s1", targetMountPoint]
+        )
+        XCTAssertEqual(
+            targetMountPoint,
             FileManager.default.homeDirectoryForCurrentUser
                 .appendingPathComponent("Volumes/OpenNTFS-disk9s1").path
         )

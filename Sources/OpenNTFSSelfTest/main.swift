@@ -96,6 +96,11 @@ check(plan.arguments.contains("/dev/disk9s1"), "write plan uses the validated de
     let nfsOptionIndex = plan.arguments.firstIndex(of: "-n")
     let nfsOptions = nfsOptionIndex.map { plan.arguments[$0 + 1] } ?? ""
     check(nfsOptions == "wsize=1048576,rsize=1048576,tcp", "write plan omits ineffective client async and locking flags")
+    let optionTerminator = plan.arguments.firstIndex(of: "--")
+    check(
+        optionTerminator.map { Array(plan.arguments.dropFirst($0 + 1)) } == ["/dev/disk9s1", expectedMountPoint],
+        "write plan terminates variadic options before disk and mount point"
+    )
 } catch {
     check(false, "microVM write plan is available")
 }

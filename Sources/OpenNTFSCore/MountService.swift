@@ -87,6 +87,8 @@ public struct MountService: Sendable {
                 "--window",
                 "false",
             ] + 性能优化参数 + [
+                // -n 接受多个值，没有 -- 时会把磁盘和挂载点当成 NFS 选项。
+                "--",
                 "/dev/\(volume.id)",
                 mountPoint.path,
             ],
