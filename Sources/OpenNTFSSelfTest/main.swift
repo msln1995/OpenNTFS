@@ -101,9 +101,64 @@ check(plan.arguments.contains("/dev/disk9s1"), "write plan uses the validated de
         optionTerminator.map { Array(plan.arguments.dropFirst($0 + 1)) } == ["/dev/disk9s1", expectedMountPoint],
         "write plan terminates variadic options before disk and mount point"
     )
+
+    let repairPlan = try MountService().planRepairDirtyVolume(volume: externalVolume)
+    check(repairPlan.arguments.contains("shell"), "repair plan uses the anylinuxfs VM shell")
+    check(
+        repairPlan.arguments.contains(MountService.dirtyVolumeRepairCommand),
+        "repair plan passes the bundled ntfsfix command"
+    )
+    check(
+        MountService.dirtyVolumeRepairCommand.contains("/usr/bin/ntfsfix -d /dev/vda"),
+        "repair command clears the dirty flag inside the VM"
+    )
+    check(
+        MountService.dirtyVolumeRepairCommand.contains("hiberfil.sys"),
+        "repair command checks for a hibernated Windows volume first"
+    )
+    check(
+        !MountService.dirtyVolumeRepairCommand.lowercased().contains("force"),
+        "repair command never bypasses NTFS consistency checks"
+    )
+    check(!repairPlan.arguments.contains("--remount"), "repair plan releases the host mount before running")
 } catch {
     check(false, "microVM write plan is available")
 }
+
+check(
+    MountService.kernelLogPath(
+        in: "macOS: Kernel log saved to /Users/test/Library/Logs/anylinuxfs_kernel-x.log"
+    ) == "/Users/test/Library/Logs/anylinuxfs_kernel-x.log",
+    "mount output exposes the kernel log path"
+)
+check(
+    MountService.classifyKernelLog("ntfs3(vda): volume is dirty and \"force\" flag is not set!") == .dirty,
+    "kernel logs identify a dirty NTFS volume"
+)
+check(
+    MountService.classifyKernelLog("Windows is hibernated, refused to mount.") == .hibernated,
+    "kernel logs identify a hibernated NTFS volume"
+)
+check(
+    MountService.parseRepairOutcome(
+        "\(MountService.repairExitCodeMarker)=0\nVolume Flags: 0x0000"
+    ) == .repaired,
+    "repair succeeds only with a zero exit code and clean flags"
+)
+check(
+    MountService.parseRepairOutcome(
+        "\(MountService.repairExitCodeMarker)=0\nVolume Flags: 0x0001"
+    ) == .failed,
+    "repair fails when the dirty flag remains"
+)
+check(
+    MountService.parseRepairOutcome("\(MountService.repairExitCodeMarker)=0") == .failed,
+    "repair fails when the flag state cannot be verified"
+)
+check(
+    MountService.parseRepairOutcome("\(MountService.repairResultMarker)=hibernated") == .hibernated,
+    "repair refuses a hibernated volume"
+)
 
 let wholeDiskCases = ["disk4s1": "disk4", "disk10s12": "disk10"]
 for (volumeID, expectedDisk) in wholeDiskCases {

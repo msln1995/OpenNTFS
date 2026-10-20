@@ -226,6 +226,114 @@ final class OpenNTFSCoreTests: XCTestCase {
         XCTAssertTrue(runner.invocations[0].hasSuffix("/anylinuxfs status"))
     }
 
+    func testKernelLogPathIsExtractedFromMountOutput() {
+        let output = """
+        Linux: mount: wrong fs type
+        macOS: Kernel log saved to /Users/test/Library/Logs/anylinuxfs_kernel-abc123.log
+        macOS: vmnet-helper exited with status: 0
+        """
+
+        XCTAssertEqual(
+            MountService.kernelLogPath(in: output),
+            "/Users/test/Library/Logs/anylinuxfs_kernel-abc123.log"
+        )
+        XCTAssertNil(MountService.kernelLogPath(in: "Linux: mount failed"))
+    }
+
+    func testKernelLogDistinguishesDirtyAndHibernatedVolumes() {
+        XCTAssertEqual(
+            MountService.classifyKernelLog(
+                "ntfs3(vda): volume is dirty and \"force\" flag is not set!"
+            ),
+            .dirty
+        )
+        XCTAssertEqual(
+            MountService.classifyKernelLog("Windows is hibernated, refused to mount."),
+            .hibernated
+        )
+        XCTAssertNil(MountService.classifyKernelLog("ntfs3(vda): volume is clean"))
+    }
+
+    func testRepairPlanUsesBundledNtfsfixWithoutForcing() throws {
+        try XCTSkipUnless(
+            FileManager.default.fileExists(atPath: "/opt/homebrew/bin/anylinuxfs") ||
+                FileManager.default.fileExists(atPath: "/usr/local/bin/anylinuxfs"),
+            "anylinuxfs is not installed"
+        )
+
+        let plan = try MountService().planRepairDirtyVolume(volume: testVolume())
+        let shellIndex = try XCTUnwrap(plan.arguments.firstIndex(of: "shell"))
+
+        XCTAssertEqual(
+            Array(plan.arguments[shellIndex...]),
+            ["shell", "-c", MountService.dirtyVolumeRepairCommand, "/dev/disk9s1"]
+        )
+        XCTAssertTrue(MountService.dirtyVolumeRepairCommand.contains("/usr/bin/ntfsfix -d /dev/vda"))
+        XCTAssertTrue(MountService.dirtyVolumeRepairCommand.contains("hiberfil.sys"))
+        XCTAssertFalse(plan.arguments.contains("--remount"))
+        XCTAssertFalse(MountService.dirtyVolumeRepairCommand.lowercased().contains("force"))
+        XCTAssertEqual(plan.readableDevicePath, "/dev/disk9s1")
+        XCTAssertTrue(plan.releaseMountedDeviceFirst)
+    }
+
+    func testRepairPlanLeavesUnmountedVolumeAlone() throws {
+        try XCTSkipUnless(
+            FileManager.default.fileExists(atPath: "/opt/homebrew/bin/anylinuxfs") ||
+                FileManager.default.fileExists(atPath: "/usr/local/bin/anylinuxfs"),
+            "anylinuxfs is not installed"
+        )
+
+        let volume = NTFSVolume(
+            id: "disk9s1",
+            name: "Test",
+            mountPoint: nil,
+            size: 1_000,
+            isWritable: false,
+            isInternal: false
+        )
+
+        XCTAssertFalse(try MountService().planRepairDirtyVolume(volume: volume).releaseMountedDeviceFirst)
+    }
+
+    func testRepairOutcomeRequiresSuccessfulExitAndCleanFlags() {
+        XCTAssertEqual(
+            MountService.parseRepairOutcome(
+                """
+                \(MountService.repairExitCodeMarker)=0
+                Volume Flags: 0x0000
+                """
+            ),
+            .repaired
+        )
+        XCTAssertEqual(
+            MountService.parseRepairOutcome(
+                """
+                \(MountService.repairExitCodeMarker)=0
+                Volume Flags: 0x0001
+                """
+            ),
+            .failed
+        )
+        XCTAssertEqual(
+            MountService.parseRepairOutcome("\(MountService.repairExitCodeMarker)=0"),
+            .failed
+        )
+        XCTAssertEqual(
+            MountService.parseRepairOutcome(
+                """
+                \(MountService.repairExitCodeMarker)=1
+                Volume Flags: 0x0000
+                """
+            ),
+            .failed
+        )
+        XCTAssertEqual(
+            MountService.parseRepairOutcome("\(MountService.repairResultMarker)=hibernated"),
+            .hibernated
+        )
+        XCTAssertNil(MountService.parseRepairOutcome("command never finished"))
+    }
+
     private func testVolume() -> NTFSVolume {
         NTFSVolume(
             id: "disk9s1",

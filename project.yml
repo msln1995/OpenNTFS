@@ -8,8 +8,8 @@ settings:
     SWIFT_VERSION: "6.0"
     DEVELOPMENT_TEAM: ""
     CODE_SIGN_STYLE: Automatic
-    MARKETING_VERSION: 0.1.4
-    CURRENT_PROJECT_VERSION: 4
+    MARKETING_VERSION: 0.1.5
+    CURRENT_PROJECT_VERSION: 5
 targets:
   OpenNTFSCore:
     type: framework
@@ -25,7 +25,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cn.openntfs.core
         DEFINES_MODULE: YES
-        CURRENT_PROJECT_VERSION: 4
+        CURRENT_PROJECT_VERSION: 5
   OpenNTFSFS:
     type: extensionkit-extension
     platform: macOS

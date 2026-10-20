@@ -11,6 +11,8 @@ OpenNTFS 是一个面向 macOS 的开源 NTFS 写入助手。它优先使用隔�
 - 结构化检测外置 NTFS 卷和已安装的第三方驱动；
 - SwiftUI 主应用、菜单栏入口和诊断 CLI；
 - `anylinuxfs` microVM 后端的管理员授权、失败回滚和真实 NTFS 镜像读写；
+- 脏 NTFS 卷的一键修复流程：应用识别内核日志中的 dirty 标记，使用 `anylinuxfs` 自带的 `ntfsfix` 清除标记后自动重试挂载；临时镜像回归已验证 `0x0001 → 0x0000`；
+- 修复前通过 `hiberfil.sys` 头识别 Windows 休眠卷，检测到休眠时拒绝修复，不会为了写入而清除休眠状态；
 - macOS 27 beta 上的中文卷标兼容处理：内部 NFS 导出名使用 ASCII，真实卷标不变；
 - OpenNTFS 自检、XCTest 回归测试，以及 Xcode 应用构建。
 
@@ -45,8 +47,10 @@ OpenNTFS 是一个面向 macOS 的开源 NTFS 写入助手。它优先使用隔�
    ```
 
 4. 启动应用，确认设备显示为只读后点击“启用写入”。
-5. 如果应用提示磁盘访问被拒绝，再到“系统设置 → 隐私与安全性 → 完全磁盘访问权限”中加入 `OpenNTFS.app`，重新打开应用后重试。
-6. 成功后，实际挂载点通常是 `~/Volumes/OpenNTFS-diskXsY`，可用以下命令核验：
+5. 如果磁盘上次没有在 Windows 中安全弹出，应用会显示“需要修复”。点击“一键修复并启用写入”，确认后应用会自动清除 NTFS 检查标记并重新挂载，不需要使用终端。
+6. 如果磁盘处于 Windows 休眠或“快速启动”状态，应用会停止修复并显示处理步骤。请回到 Windows 正常关机后再试，不要绕过该限制。
+7. 如果应用提示磁盘访问被拒绝，再到“系统设置 → 隐私与安全性 → 完全磁盘访问权限”中加入 `OpenNTFS.app`，重新打开应用后重试。
+8. 成功后，实际挂载点通常是 `~/Volumes/OpenNTFS-diskXsY`，可用以下命令核验：
 
    ```bash
    anylinuxfs status
@@ -80,14 +84,16 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
 4. 管理员密码通过临时 `SUDO_ASKPASS` 脚本输入，不把密码写入日志或命令行参数。
 5. 不自动降低 SIP、启动安全策略或要求恢复模式。
 6. 应用显示“可写”前会重新读取后端状态，而不是仅依据命令退出码。
-7. 写入计划不附加 `-o force`，休眠或脏 NTFS 卷会保持拒绝写入。
-8. 安全推出先通过 `anylinuxfs unmount --wait-for-vm` 停止 microVM，再推出整盘；任一步失败都不会继续拔盘流程。
+7. 写入计划不附加 `-o force`，脏 NTFS 卷必须先通过应用内确认的一键修复，休眠卷直接拒绝修复。
+8. 一键修复只处理外置卷，使用 `anylinuxfs` 自带的 `ntfsfix`；运行前检查 `hiberfil.sys`，检测到 Windows 休眠即停止，不修改磁盘。
+9. 安全推出先通过 `anylinuxfs unmount --wait-for-vm` 停止 microVM，再推出整盘；任一步失败都不会继续拔盘流程。
 
 ## 已知限制
 
 - `anylinuxfs` 使用 NFS 映射，部分应用对网络挂载的文件锁、扩展属性或原子替换支持不完整。
 - macOS 对非 ASCII NFS 路径存在兼容问题，因此内部挂载目录使用 ASCII 别名。
-- NTFS 卷如果处于 Windows 休眠/快速启动状态，不应写入。OpenNTFS 不会用 `-o force` 绕过该限制，请先在 Windows 中安全弹出或完全关机。
+- NTFS 卷如果处于 Windows 休眠/快速启动状态，不应写入。OpenNTFS 不会用 `-o force` 绕过该限制，检测到休眠后会拒绝自动修复，请先在 Windows 中完全关机。
+- 一键修复清除的是 NTFS 脏标记，不等同于 Windows 的 `chkdsk /f`。如果文件系统仍有错误，Windows 可能仍会要求扫描；修复前请尽量备份重要数据。
 - 这是用户态工具，不等同于经过 Apple 签名公证的商业文件系统驱动。
 
 ## 项目结构

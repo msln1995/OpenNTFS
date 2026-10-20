@@ -20,6 +20,17 @@ public enum MountServiceError: Error, LocalizedError, Equatable {
     }
 }
 
+public enum NTFSVolumeIssue: Equatable, Sendable {
+    case dirty
+    case hibernated
+}
+
+public enum DirtyVolumeRepairOutcome: Equatable, Sendable {
+    case repaired
+    case hibernated
+    case failed
+}
+
 public struct MountPlan: Equatable, Sendable {
     public let executable: String
     public let arguments: [String]
@@ -107,6 +118,117 @@ public struct MountService: Sendable {
             executable: "/usr/bin/env",
             arguments: privilegeEnvironment + [executable, "unmount", "--wait-for-vm", "/dev/\(volume.id)"]
         )
+    }
+
+    public func planRepairDirtyVolume(volume: NTFSVolume) throws -> MountPlan {
+        try validate(volume)
+        guard let executable = Self.anylinuxfsExecutable() else {
+            throw MountServiceError.backendMissing
+        }
+        return MountPlan(
+            executable: "/usr/bin/env",
+            arguments: privilegeEnvironment + [
+                executable,
+                "shell",
+                "-c",
+                Self.dirtyVolumeRepairCommand,
+                "/dev/\(volume.id)",
+            ],
+            readableDevicePath: "/dev/\(volume.id)",
+            releaseMountedDeviceFirst: volume.mountPoint != nil
+        )
+    }
+
+    public static let repairResultMarker = "__OPENNTFS_REPAIR_RESULT__"
+    public static let repairExitCodeMarker = "__OPENNTFS_REPAIR_EXIT__"
+
+    // 通过 anylinuxfs 自带的 Alpine 环境清理脏标记，不要求用户另装 ntfsfix。
+    // ntfscat 先检查 hiberfil.sys 头，避免把 Windows 休眠卷误当成普通脏卷。
+    public static let dirtyVolumeRepairCommand = """
+        hib=$(/usr/bin/ntfscat -f /dev/vda /hiberfil.sys 2>/dev/null | head -c 4)
+        if [ "$hib" = "hibr" ]; then
+          echo "\(repairResultMarker)=hibernated"
+          exit 3
+        fi
+        /usr/bin/ntfsfix -d /dev/vda >/dev/null 2>&1
+        rc=$?
+        echo "\(repairExitCodeMarker)=$rc"
+        /usr/bin/ntfsinfo -m /dev/vda 2>/dev/null
+        """
+
+    public static func kernelLogPath(in output: String) -> String? {
+        let marker = "Kernel log saved to "
+        for line in output.split(whereSeparator: \.isNewline).reversed() {
+            guard let range = line.range(of: marker) else { continue }
+            let path = line[range.upperBound...].trimmingCharacters(in: .whitespaces)
+            return path.isEmpty ? nil : path
+        }
+        return nil
+    }
+
+    public static func classifyKernelLog(_ contents: String) -> NTFSVolumeIssue? {
+        let lowercased = contents.lowercased()
+        if lowercased.contains("hibernat") {
+            return .hibernated
+        }
+        if lowercased.contains("volume is dirty") {
+            return .dirty
+        }
+        return nil
+    }
+
+    public static func parseRepairOutcome(_ output: String) -> DirtyVolumeRepairOutcome? {
+        if output.contains("\(repairResultMarker)=hibernated") {
+            return .hibernated
+        }
+        guard let range = output.range(of: "\(repairExitCodeMarker)=", options: .backwards) else {
+            return nil
+        }
+        let remainder = output[range.upperBound...]
+        let digits = remainder.prefix { $0 == "-" || $0.isNumber }
+        guard let exitCode = Int(digits) else { return nil }
+        if exitCode != 0 {
+            return .failed
+        }
+        guard let flags = lastVolumeFlags(in: output), flags & 0x1 == 0 else {
+            return .failed
+        }
+        return .repaired
+    }
+
+    public static func lastVolumeFlags(in output: String) -> UInt32? {
+        guard let match = output.matches(of: #/Volume Flags:\s*0x([0-9A-Fa-f]+)/#).last,
+              let value = UInt32(String(match.1), radix: 16) else {
+            return nil
+        }
+        return value
+    }
+
+    public func diagnoseMountFailure(output: String) -> NTFSVolumeIssue? {
+        guard let path = Self.kernelLogPath(in: output),
+              let issue = Self.issueFromKernelLog(at: path) else {
+            return nil
+        }
+        return issue
+    }
+
+    public static func issueFromKernelLog(at path: String) -> NTFSVolumeIssue? {
+        let fileURL = URL(fileURLWithPath: path).standardizedFileURL
+        let logsDirectory = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Logs", isDirectory: true)
+            .standardizedFileURL
+        guard fileURL.deletingLastPathComponent().path == logsDirectory.path,
+              fileURL.lastPathComponent.hasPrefix("anylinuxfs_kernel-"),
+              fileURL.pathExtension == "log",
+              let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path),
+              let modified = attributes[.modificationDate] as? Date,
+              Date().timeIntervalSince(modified) < 300 else {
+            return nil
+        }
+        guard let contents = try? String(contentsOf: fileURL, encoding: .utf8) else {
+            return nil
+        }
+        return classifyKernelLog(contents)
     }
 
     public static func wholeDiskIdentifier(for volumeID: String) -> String? {

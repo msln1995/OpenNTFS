@@ -33,8 +33,12 @@ final class AppModel {
     var writeEnabledVolumeIDs: Set<String> = []
     var writeMountPoints: [String: String] = [:]
     var operationMessages: [String: String] = [:]
+    var technicalDetails: [String: String] = [:]
+    var volumeIssues: [String: NTFSVolumeIssue] = [:]
     var needsFullDiskAccessVolumeIDs: Set<String> = []
     var ejectingVolumeID: String?
+    var repairingVolumeID: String?
+    var pendingRepairVolume: NTFSVolume?
 
     func refresh() async {
         isRefreshing = true
@@ -49,6 +53,10 @@ final class AppModel {
             let activeMounts = await Task.detached { MountService().activeMountPoints() }.value
             writeMountPoints = activeMounts
             writeEnabledVolumeIDs = Set(activeMounts.keys)
+            let volumeIDs = Set(value.volumes.map(\.id))
+            volumeIssues = volumeIssues.filter { volumeIDs.contains($0.key) }
+            operationMessages = operationMessages.filter { volumeIDs.contains($0.key) }
+            technicalDetails = technicalDetails.filter { volumeIDs.contains($0.key) }
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
@@ -67,18 +75,94 @@ final class AppModel {
             guard writeEnabledVolumeIDs.contains(volume.id) else {
                 throw MountServiceError.authorizationFailed(output.isEmpty ? "挂载命令结束，但没有发现可写挂载点" : output)
             }
+            volumeIssues.removeValue(forKey: volume.id)
+            technicalDetails.removeValue(forKey: volume.id)
             operationMessages[volume.id] = "写入模式已启用：\(writeMountPoints[volume.id] ?? "")"
             needsFullDiskAccessVolumeIDs.remove(volume.id)
         } catch {
             writeEnabledVolumeIDs.remove(volume.id)
-            let message = error.localizedDescription
-            operationMessages[volume.id] = message
-            if message.localizedCaseInsensitiveContains("operation not permitted") ||
-                message.localizedCaseInsensitiveContains("permission denied") ||
-                message.localizedCaseInsensitiveContains("insufficient permissions") {
+            let details = error.localizedDescription
+            technicalDetails[volume.id] = details
+            let issue = await Task.detached {
+                MountService().diagnoseMountFailure(output: details)
+            }.value
+            if let issue {
+                volumeIssues[volume.id] = issue
+                operationMessages[volume.id] = Self.issueMessage(for: issue)
+                needsFullDiskAccessVolumeIDs.remove(volume.id)
+                return
+            }
+            operationMessages[volume.id] = "无法启用写入。请确认磁盘没有在 Windows 中使用，然后重试。"
+            if details.localizedCaseInsensitiveContains("operation not permitted") ||
+                details.localizedCaseInsensitiveContains("permission denied") ||
+                details.localizedCaseInsensitiveContains("insufficient permissions") {
                 needsFullDiskAccessVolumeIDs.insert(volume.id)
                 operationMessages[volume.id] = "磁盘访问被拒绝。请检查完全磁盘访问权限和 anylinuxfs 安装状态，然后重试。"
             }
+        }
+    }
+
+    func repairAndEnableWrite(volume: NTFSVolume) async {
+        guard volumeIssues[volume.id] == .dirty else { return }
+        guard mountingVolumeID == nil, repairingVolumeID == nil, ejectingVolumeID == nil else { return }
+        repairingVolumeID = volume.id
+        operationMessages[volume.id] = "正在修复磁盘，请不要拔出…"
+        defer { repairingVolumeID = nil }
+
+        do {
+            let plan = try MountService().planRepairDirtyVolume(volume: volume)
+            let output = try await Task.detached { try MountService().executeAuthorized(plan) }.value
+            let outcome = MountService.parseRepairOutcome(output) ?? .failed
+            await applyRepairOutcome(outcome, volume: volume, details: output)
+        } catch {
+            let details = error.localizedDescription
+            technicalDetails[volume.id] = details
+            if let outcome = MountService.parseRepairOutcome(details) {
+                await applyRepairOutcome(outcome, volume: volume, details: details)
+            } else {
+                operationMessages[volume.id] = "自动修复没有完成。你可以重试；如果仍然失败，请到 Windows 中运行磁盘检查。"
+            }
+        }
+    }
+
+    private func applyRepairOutcome(
+        _ outcome: DirtyVolumeRepairOutcome,
+        volume: NTFSVolume,
+        details: String
+    ) async {
+        switch outcome {
+        case .hibernated:
+            technicalDetails[volume.id] = details
+            volumeIssues[volume.id] = .hibernated
+            operationMessages[volume.id] = "这个磁盘正被 Windows 休眠占用。请回到 Windows 正常关机后再试。"
+        case .failed:
+            technicalDetails[volume.id] = details
+            volumeIssues[volume.id] = .dirty
+            operationMessages[volume.id] = "自动修复没有成功。请重试，或到 Windows 中运行磁盘检查。"
+        case .repaired:
+            operationMessages[volume.id] = "修复完成，正在重新挂载…"
+            await refresh()
+            guard let freshVolume = snapshot?.volumes.first(where: { $0.id == volume.id }) else {
+                operationMessages[volume.id] = "磁盘已修复，但找不到设备。请重新插拔后再试。"
+                return
+            }
+            volumeIssues.removeValue(forKey: volume.id)
+            await enableWrite(volume: freshVolume)
+            if writeEnabledVolumeIDs.contains(volume.id) {
+                technicalDetails.removeValue(forKey: volume.id)
+                operationMessages[volume.id] = "已修复并启用写入：\(writeMountPoints[volume.id] ?? "")"
+            } else if volumeIssues[volume.id] == nil {
+                operationMessages[volume.id] = "磁盘已修复，但写入挂载没有成功。请重试。"
+            }
+        }
+    }
+
+    private static func issueMessage(for issue: NTFSVolumeIssue) -> String {
+        switch issue {
+        case .dirty:
+            "这个磁盘上次没有正常结束写入。请使用下方的一键修复，清除检查标记后再启用写入。"
+        case .hibernated:
+            "这个磁盘正被 Windows 休眠占用。请回到 Windows 正常关机后再试，OpenNTFS 不会自动修改它。"
         }
     }
 
@@ -135,6 +219,24 @@ struct ContentView: View {
                 .disabled(model.isRefreshing)
             }
         }
+        .alert(
+            "修复并启用写入？",
+            isPresented: Binding(
+                get: { model.pendingRepairVolume != nil },
+                set: { if !$0 { model.pendingRepairVolume = nil } }
+            ),
+            presenting: model.pendingRepairVolume
+        ) { volume in
+            Button("取消", role: .cancel) {
+                model.pendingRepairVolume = nil
+            }
+            Button("开始修复", role: .destructive) {
+                model.pendingRepairVolume = nil
+                Task { await model.repairAndEnableWrite(volume: volume) }
+            }
+        } message: { _ in
+            Text("OpenNTFS 将清除 Windows 留下的磁盘检查标记，然后重新挂载为可写。这不会删除文件，但修复前请尽量备份重要数据。如果磁盘处于 Windows 休眠状态，修复会自动停止。")
+        }
     }
 
     private var header: some View {
@@ -152,30 +254,91 @@ struct ContentView: View {
             ForEach(volumes) { volume in
                 let recommendation = model.recommendations[volume.id]
                 let writeEnabled = model.writeEnabledVolumeIDs.contains(volume.id)
+                let issue = model.volumeIssues[volume.id]
+                let isWritableNow = volume.isWritable || writeEnabled
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
-                        Image(systemName: volume.isWritable || writeEnabled ? "checkmark.circle.fill" : "lock.fill")
-                            .foregroundStyle(volume.isWritable || writeEnabled ? .green : .orange)
+                        Image(systemName: isWritableNow
+                            ? "checkmark.circle.fill"
+                            : (issue == .dirty ? "wrench.and.screwdriver.fill" : (issue == .hibernated ? "moon.zzz.fill" : "lock.fill")))
+                            .foregroundStyle(isWritableNow ? .green : (issue == .hibernated ? .red : .orange))
                         VStack(alignment: .leading) {
                             Text(volume.name).font(.title3.bold())
                             Text(volume.mountPoint ?? "未挂载").font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Text(volume.isWritable || writeEnabled ? "可写" : "只读")
+                        Text(isWritableNow ? "可写" : (issue == .dirty ? "需要修复" : (issue == .hibernated ? "休眠占用" : "只读")))
                             .font(.caption.bold())
                             .padding(.horizontal, 8).padding(.vertical, 4)
-                            .background(volume.isWritable || writeEnabled ? Color.green.opacity(0.15) : Color.orange.opacity(0.15))
+                            .background(isWritableNow ? Color.green.opacity(0.15) : (issue == .hibernated ? Color.red.opacity(0.15) : Color.orange.opacity(0.15)))
                             .clipShape(RoundedRectangle(cornerRadius: 6))
                     }
                     Text(recommendation?.title ?? "正在检查")
                         .font(.headline)
                     Text(recommendation?.explanation ?? "")
                         .foregroundStyle(.secondary)
+                    if issue == .dirty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("这个磁盘需要先修复", systemImage: "wrench.and.screwdriver.fill")
+                                .font(.headline)
+                                .foregroundStyle(.orange)
+                            Text("上次 Windows 没有正常关机或安全弹出时，磁盘会留下“需要检查”标记。清除标记后才能安全写入。修复不会删除文件，但请先备份重要数据。")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                            Button {
+                                model.pendingRepairVolume = volume
+                            } label: {
+                                Label(
+                                    model.repairingVolumeID == volume.id ? "正在修复…" : "一键修复并启用写入",
+                                    systemImage: model.repairingVolumeID == volume.id ? "hourglass" : "wrench.and.screwdriver"
+                                )
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(model.repairingVolumeID != nil || model.mountingVolumeID != nil || model.ejectingVolumeID != nil)
+                            Text("如果磁盘被 Windows 休眠或“快速启动”占用，修复会自动停止，不会修改磁盘。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(12)
+                        .background(Color.orange.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    } else if issue == .hibernated {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("这个磁盘正被 Windows 休眠占用", systemImage: "moon.zzz.fill")
+                                .font(.headline)
+                                .foregroundStyle(.red)
+                            Text("为防止损坏文件，OpenNTFS 不会自动修复或写入。请回到 Windows 正常关机（不是睡眠或休眠），再重新连接磁盘。")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                            DisclosureGroup("在 Windows 上怎么处理？") {
+                                Text("1. 把磁盘接回 Windows。\n2. 在开始菜单中选择“关机”，不要选择“睡眠”或“休眠”。\n3. 如果仍然出现此提示，打开“控制面板 → 电源选项 → 选择电源按钮的功能 → 更改当前不可用的设置”，取消“启用快速启动”，保存后再次关机。\n4. 安全弹出磁盘，再连接到 Mac。")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .padding(.top, 4)
+                            }
+                            .font(.callout)
+                        }
+                        .padding(12)
+                        .background(Color.red.opacity(0.10))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
                     if let message = model.operationMessages[volume.id] {
                         Text(message)
                             .font(.caption)
-                            .foregroundStyle(writeEnabled ? .green : .secondary)
+                            .foregroundStyle(writeEnabled ? .green : (issue == nil ? .secondary : .orange))
                             .textSelection(.enabled)
+                    }
+                    if let details = model.technicalDetails[volume.id] {
+                        DisclosureGroup("技术细节") {
+                            ScrollView {
+                                Text(details)
+                                    .font(.caption.monospaced())
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .frame(maxHeight: 160)
+                        }
+                        .font(.caption)
                     }
                     if model.needsFullDiskAccessVolumeIDs.contains(volume.id) {
                         Button("打开完全磁盘访问设置", systemImage: "gear") {
@@ -186,16 +349,19 @@ struct ContentView: View {
                         .buttonStyle(.bordered)
                     }
                     HStack {
-                        Button(writeEnabled ? "写入已启用" : "启用写入", systemImage: writeEnabled ? "checkmark.circle" : "pencil.and.outline") {
-                            Task { await model.enableWrite(volume: volume) }
+                        if issue == nil {
+                            Button(writeEnabled ? "写入已启用" : "启用写入", systemImage: writeEnabled ? "checkmark.circle" : "pencil.and.outline") {
+                                Task { await model.enableWrite(volume: volume) }
+                            }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(
+                                    model.mountingVolumeID != nil ||
+                                    model.repairingVolumeID != nil ||
+                                    writeEnabled ||
+                                    recommendation?.safety != .safe ||
+                                    recommendation?.backend == .unavailable
+                                )
                         }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(
-                                model.mountingVolumeID != nil ||
-                                writeEnabled ||
-                                recommendation?.safety != .safe ||
-                                recommendation?.backend == .unavailable
-                            )
                         Button("在 Finder 中打开", systemImage: "folder") {
                             if let path = model.writeMountPoints[volume.id] ?? volume.mountPoint {
                                 NSWorkspace.shared.open(URL(fileURLWithPath: path))
@@ -205,7 +371,11 @@ struct ContentView: View {
                         Button("安全推出", systemImage: "eject") {
                             Task { await model.safeEject(volume: volume) }
                         }
-                        .disabled(model.ejectingVolumeID != nil || model.mountingVolumeID != nil)
+                        .disabled(
+                            model.ejectingVolumeID != nil ||
+                            model.mountingVolumeID != nil ||
+                            model.repairingVolumeID != nil
+                        )
                     }
                 }
                 .padding(18)
@@ -249,7 +419,12 @@ struct MenuBarView: View {
             Text("OpenNTFS").font(.headline)
             if let volumes = model.snapshot?.volumes, !volumes.isEmpty {
                 ForEach(volumes) { volume in
-                    Label("\(volume.name) · \(volume.isWritable ? "可写" : "只读")", systemImage: "externaldrive")
+                    let status: String = if let issue = model.volumeIssues[volume.id] {
+                        issue == .dirty ? "需要修复" : "被 Windows 休眠占用"
+                    } else {
+                        volume.isWritable || model.writeEnabledVolumeIDs.contains(volume.id) ? "可写" : "只读"
+                    }
+                    Label("\(volume.name) · \(status)", systemImage: "externaldrive")
                 }
             } else {
                 Text("没有 NTFS 设备").foregroundStyle(.secondary)
