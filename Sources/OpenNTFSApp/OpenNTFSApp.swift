@@ -38,7 +38,9 @@ final class AppModel {
     var needsFullDiskAccessVolumeIDs: Set<String> = []
     var ejectingVolumeID: String?
     var repairingVolumeID: String?
+    var restoringVolumeID: String?
     var pendingRepairVolume: NTFSVolume?
+    var pendingEjectVolume: NTFSVolume?
 
     func refresh() async {
         isRefreshing = true
@@ -104,7 +106,11 @@ final class AppModel {
 
     func repairAndEnableWrite(volume: NTFSVolume) async {
         guard volumeIssues[volume.id] == .dirty else { return }
-        guard mountingVolumeID == nil, repairingVolumeID == nil, ejectingVolumeID == nil else { return }
+        guard mountingVolumeID == nil,
+              repairingVolumeID == nil,
+              ejectingVolumeID == nil,
+              restoringVolumeID == nil
+        else { return }
         repairingVolumeID = volume.id
         operationMessages[volume.id] = "正在修复磁盘，请不要拔出…"
         defer { repairingVolumeID = nil }
@@ -166,6 +172,29 @@ final class AppModel {
         }
     }
 
+    func restoreReadOnly(volume: NTFSVolume) async {
+        guard mountingVolumeID == nil,
+              repairingVolumeID == nil,
+              ejectingVolumeID == nil,
+              restoringVolumeID == nil
+        else { return }
+        restoringVolumeID = volume.id
+        operationMessages[volume.id] = "正在退出写入模式并恢复 macOS 只读挂载…"
+        defer { restoringVolumeID = nil }
+        do {
+            let mountPoint = try await Task.detached {
+                try MountService().restoreReadOnlyMount(volume: volume)
+            }.value
+            writeEnabledVolumeIDs.remove(volume.id)
+            writeMountPoints.removeValue(forKey: volume.id)
+            operationMessages[volume.id] = "已恢复 macOS 只读挂载：\(mountPoint)"
+            await refresh()
+        } catch {
+            operationMessages[volume.id] = "恢复只读挂载失败：\(error.localizedDescription)"
+            await refresh()
+        }
+    }
+
     func safeEject(volume: NTFSVolume) async {
         ejectingVolumeID = volume.id
         operationMessages[volume.id] = "正在安全推出…"
@@ -174,7 +203,7 @@ final class AppModel {
             _ = try await Task.detached { try MountService().safeEject(volume: volume) }.value
             writeEnabledVolumeIDs.remove(volume.id)
             writeMountPoints.removeValue(forKey: volume.id)
-            operationMessages[volume.id] = "已安全推出，可以拔出设备。"
+            operationMessages[volume.id] = "已安全推出，可以拔出设备。桌面图标消失是正常的；若还要继续使用，请拔下后重新插入。"
             await refresh()
         } catch {
             operationMessages[volume.id] = error.localizedDescription
@@ -236,6 +265,28 @@ struct ContentView: View {
             }
         } message: { _ in
             Text("OpenNTFS 将清除 Windows 留下的磁盘检查标记，然后重新挂载为可写。这不会删除文件，但修复前请尽量备份重要数据。如果磁盘处于 Windows 休眠状态，修复会自动停止。")
+        }
+        .alert(
+            "安全推出设备？",
+            isPresented: Binding(
+                get: { model.pendingEjectVolume != nil },
+                set: { if !$0 { model.pendingEjectVolume = nil } }
+            ),
+            presenting: model.pendingEjectVolume
+        ) { volume in
+            Button("取消", role: .cancel) {
+                model.pendingEjectVolume = nil
+            }
+            Button("安全推出") {
+                model.pendingEjectVolume = nil
+                Task { await model.safeEject(volume: volume) }
+            }
+        } message: { volume in
+            if model.writeEnabledVolumeIDs.contains(volume.id) {
+                Text("这会停止 OpenNTFS 写入，并把整块磁盘从系统移除。桌面图标会消失，适合准备拔下 U 盘时使用。如果只是想退出写入模式、继续使用文件，请取消并点“恢复只读”。")
+            } else {
+                Text("这会把整块磁盘从系统移除，桌面图标会消失。适合准备拔下设备时使用；若要继续使用文件，请取消。")
+            }
         }
     }
 
@@ -350,17 +401,26 @@ struct ContentView: View {
                     }
                     HStack {
                         if issue == nil {
-                            Button(writeEnabled ? "写入已启用" : "启用写入", systemImage: writeEnabled ? "checkmark.circle" : "pencil.and.outline") {
-                                Task { await model.enableWrite(volume: volume) }
-                            }
+                            if writeEnabled {
+                                Button("恢复只读", systemImage: "arrow.uturn.backward") {
+                                    Task { await model.restoreReadOnly(volume: volume) }
+                                }
+                                .buttonStyle(.borderedProminent)
+                            } else if volume.mountPoint == nil, !volume.isInternal {
+                                Button("挂载为只读", systemImage: "externaldrive") {
+                                    Task { await model.restoreReadOnly(volume: volume) }
+                                }
+                                .buttonStyle(.borderedProminent)
+                            } else {
+                                Button("启用写入", systemImage: "pencil.and.outline") {
+                                    Task { await model.enableWrite(volume: volume) }
+                                }
                                 .buttonStyle(.borderedProminent)
                                 .disabled(
-                                    model.mountingVolumeID != nil ||
-                                    model.repairingVolumeID != nil ||
-                                    writeEnabled ||
                                     recommendation?.safety != .safe ||
                                     recommendation?.backend == .unavailable
                                 )
+                            }
                         }
                         Button("在 Finder 中打开", systemImage: "folder") {
                             if let path = model.writeMountPoints[volume.id] ?? volume.mountPoint {
@@ -368,14 +428,26 @@ struct ContentView: View {
                             }
                         }
                         .disabled(model.writeMountPoints[volume.id] == nil && volume.mountPoint == nil)
-                        Button("安全推出", systemImage: "eject") {
-                            Task { await model.safeEject(volume: volume) }
+                        Button(writeEnabled ? "安全推出（拔盘）" : "安全推出", systemImage: "eject") {
+                            model.pendingEjectVolume = volume
                         }
+                        .help("停止 OpenNTFS 写入并从系统推出整盘。推出后桌面图标会消失，重新插拔才会再次出现。")
                         .disabled(
                             model.ejectingVolumeID != nil ||
                             model.mountingVolumeID != nil ||
-                            model.repairingVolumeID != nil
+                            model.repairingVolumeID != nil ||
+                            model.restoringVolumeID != nil
                         )
+                    }
+                    .disabled(
+                        model.mountingVolumeID != nil ||
+                        model.repairingVolumeID != nil ||
+                        model.restoringVolumeID != nil
+                    )
+                    if writeEnabled {
+                        Text("“恢复只读”会停止 OpenNTFS 写入并把磁盘交回 macOS；“安全推出（拔盘）”会从系统移除整盘，适合准备拔下 U 盘时使用。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
                 .padding(18)

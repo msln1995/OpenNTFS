@@ -7,6 +7,7 @@ public enum MountServiceError: Error, LocalizedError, Equatable {
     case backendMissing
     case authorizationFailed(String)
     case ejectFailed(String)
+    case mountFailed(String)
 
     public var errorDescription: String? {
         switch self {
@@ -16,6 +17,7 @@ public enum MountServiceError: Error, LocalizedError, Equatable {
         case .backendMissing: "免恢复模式后端尚未安装"
         case .authorizationFailed(let message): message.isEmpty ? "管理员授权被取消或挂载失败" : message
         case .ejectFailed(let message): message.isEmpty ? "安全推出失败" : message
+        case .mountFailed(let message): message.isEmpty ? "恢复只读挂载失败" : message
         }
     }
 }
@@ -118,6 +120,80 @@ public struct MountService: Sendable {
             executable: "/usr/bin/env",
             arguments: privilegeEnvironment + [executable, "unmount", "--wait-for-vm", "/dev/\(volume.id)"]
         )
+    }
+
+    public func restoreReadOnlyMount(volume: NTFSVolume) throws -> String {
+        try validate(volume)
+
+        let activeMounts: [String: String]
+        do {
+            activeMounts = try verifiedActiveMountPoints(cancellation: "已取消恢复只读")
+        } catch {
+            throw MountServiceError.mountFailed(error.localizedDescription)
+        }
+
+        if activeMounts[volume.id] != nil {
+            _ = try executeAuthorized(try planDisableWrite(volume: volume))
+        }
+        if let existing = Self.mountPoint(forDevice: volume.id, runner: runner) {
+            return existing
+        }
+
+        let mount = try runner.run("/usr/sbin/diskutil", arguments: ["mount", "/dev/\(volume.id)"])
+        if let mounted = Self.waitForMountPoint(forDevice: volume.id, runner: runner) {
+            return mounted
+        }
+
+        let detail = [mount.stdoutString, mount.stderrString]
+            .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        throw MountServiceError.mountFailed(
+            detail.isEmpty ? "磁盘没有重新出现在桌面上，请重新插拔后再试。" : "无法恢复只读挂载：\(detail)"
+        )
+    }
+
+    public static func parseMountPoint(fromDiskutilInfoPlist data: Data) -> String? {
+        guard let propertyList = try? PropertyListSerialization.propertyList(
+            from: data,
+            options: [],
+            format: nil
+        ),
+            let dictionary = propertyList as? [String: Any],
+            let mountPoint = dictionary["MountPoint"] as? String,
+            !mountPoint.isEmpty
+        else {
+            return nil
+        }
+        return mountPoint
+    }
+
+    private static func mountPoint(forDevice deviceID: String, runner: any CommandRunning) -> String? {
+        guard let result = try? runner.run(
+            "/usr/sbin/diskutil",
+            arguments: ["info", "-plist", "/dev/\(deviceID)"]
+        ),
+            result.status == 0
+        else {
+            return nil
+        }
+        return parseMountPoint(fromDiskutilInfoPlist: result.stdout)
+    }
+
+    private static func waitForMountPoint(
+        forDevice deviceID: String,
+        runner: any CommandRunning,
+        timeout: TimeInterval = 5
+    ) -> String? {
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if let mountPoint = mountPoint(forDevice: deviceID, runner: runner) {
+                return mountPoint
+            }
+            if Date() >= deadline {
+                return nil
+            }
+            Thread.sleep(forTimeInterval: 0.25)
+        } while true
     }
 
     public func planRepairDirtyVolume(volume: NTFSVolume) throws -> MountPlan {
@@ -359,7 +435,7 @@ public struct MountService: Sendable {
         return Self.parseStatus(result.stdoutString)
     }
 
-    private func verifiedActiveMountPoints() throws -> [String: String] {
+    private func verifiedActiveMountPoints(cancellation: String = "已取消推出") throws -> [String: String] {
         guard let executable = Self.anylinuxfsExecutable() else { return [:] }
 
         let result: CommandResult
@@ -367,13 +443,13 @@ public struct MountService: Sendable {
             result = try runner.run(executable, arguments: ["status"])
         } catch {
             throw MountServiceError.ejectFailed(
-                "无法确认 anylinuxfs 状态，已取消推出：\(error.localizedDescription)"
+                "无法确认 anylinuxfs 状态，\(cancellation)：\(error.localizedDescription)"
             )
         }
         guard result.status == 0 else {
             let detail = result.stderrString.trimmingCharacters(in: .whitespacesAndNewlines)
             throw MountServiceError.ejectFailed(
-                detail.isEmpty ? "无法确认 anylinuxfs 状态，已取消推出。" : "无法确认 anylinuxfs 状态，已取消推出：\(detail)"
+                detail.isEmpty ? "无法确认 anylinuxfs 状态，\(cancellation)。" : "无法确认 anylinuxfs 状态，\(cancellation)：\(detail)"
             )
         }
         return Self.parseStatus(result.stdoutString)

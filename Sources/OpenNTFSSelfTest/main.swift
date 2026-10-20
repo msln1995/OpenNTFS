@@ -221,6 +221,28 @@ do {
 } catch {
     check(false, "disk scanner parses the diskutil property list")
 }
+do {
+    let mounted = try PropertyListSerialization.data(
+        fromPropertyList: ["MountPoint": "/Volumes/Test"],
+        format: .xml,
+        options: 0
+    )
+    check(
+        MountService.parseMountPoint(fromDiskutilInfoPlist: mounted) == "/Volumes/Test",
+        "diskutil info plist yields the restored read-only mount point"
+    )
+    let unmounted = try PropertyListSerialization.data(
+        fromPropertyList: ["MountPoint": ""],
+        format: .xml,
+        options: 0
+    )
+    check(
+        MountService.parseMountPoint(fromDiskutilInfoPlist: unmounted) == nil,
+        "diskutil info plists without a mount point are rejected"
+    )
+} catch {
+    check(false, "diskutil info plist parser handles a valid property list")
+}
 let invalidVolume = NTFSVolume(
     id: "disk9s1;touch /tmp/bad",
     name: "Invalid",

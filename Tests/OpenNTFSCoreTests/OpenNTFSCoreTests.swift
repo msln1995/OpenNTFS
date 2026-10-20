@@ -226,6 +226,85 @@ final class OpenNTFSCoreTests: XCTestCase {
         XCTAssertTrue(runner.invocations[0].hasSuffix("/anylinuxfs status"))
     }
 
+    func testParseMountPointFromDiskutilInfoPlist() throws {
+        let mounted = try PropertyListSerialization.data(
+            fromPropertyList: ["DeviceIdentifier": "disk9s1", "MountPoint": "/Volumes/Test"],
+            format: .xml,
+            options: 0
+        )
+        XCTAssertEqual(MountService.parseMountPoint(fromDiskutilInfoPlist: mounted), "/Volumes/Test")
+
+        let empty = try PropertyListSerialization.data(
+            fromPropertyList: ["MountPoint": ""],
+            format: .xml,
+            options: 0
+        )
+        XCTAssertNil(MountService.parseMountPoint(fromDiskutilInfoPlist: empty))
+        XCTAssertNil(MountService.parseMountPoint(fromDiskutilInfoPlist: Data("not a plist".utf8)))
+    }
+
+    func testRestoreReadOnlyMountUsesExistingMountPoint() throws {
+        try XCTSkipUnless(Self.anylinuxfsIsInstalled, "anylinuxfs is not installed")
+
+        let runner = QueuedRunner([
+            CommandResult(status: 0, stdout: Data(), stderr: Data()),
+            CommandResult(
+                status: 0,
+                stdout: try Self.diskutilInfoPlist(mountPoint: "/Volumes/Test"),
+                stderr: Data()
+            ),
+        ])
+
+        let mountPoint = try MountService(runner: runner).restoreReadOnlyMount(volume: testVolume())
+
+        XCTAssertEqual(mountPoint, "/Volumes/Test")
+        XCTAssertEqual(runner.invocations.count, 2)
+        XCTAssertFalse(runner.invocations.contains { $0.executable == "/usr/sbin/diskutil" && $0.arguments.first == "mount" })
+    }
+
+    func testRestoreReadOnlyMountRemountsWithDiskutil() throws {
+        try XCTSkipUnless(Self.anylinuxfsIsInstalled, "anylinuxfs is not installed")
+
+        let runner = QueuedRunner([
+            CommandResult(status: 0, stdout: Data(), stderr: Data()),
+            CommandResult(
+                status: 0,
+                stdout: try Self.diskutilInfoPlist(mountPoint: nil),
+                stderr: Data()
+            ),
+            CommandResult(status: 0, stdout: Data("Volume Test on disk9s1 mounted".utf8), stderr: Data()),
+            CommandResult(
+                status: 0,
+                stdout: try Self.diskutilInfoPlist(mountPoint: "/Volumes/Test"),
+                stderr: Data()
+            ),
+        ])
+
+        let mountPoint = try MountService(runner: runner).restoreReadOnlyMount(volume: testVolume())
+
+        XCTAssertEqual(mountPoint, "/Volumes/Test")
+        XCTAssertTrue(runner.invocations.contains {
+            $0.executable == "/usr/sbin/diskutil" && $0.arguments == ["mount", "/dev/disk9s1"]
+        })
+        XCTAssertFalse(runner.invocations.contains { $0.executable == "/usr/bin/sudo" })
+    }
+
+    func testRestoreReadOnlyMountStopsWhenAnyLinuxFSStatusIsUnreadable() throws {
+        try XCTSkipUnless(Self.anylinuxfsIsInstalled, "anylinuxfs is not installed")
+
+        let runner = QueuedRunner([
+            CommandResult(status: 1, stdout: Data(), stderr: Data("status unavailable".utf8)),
+        ])
+
+        XCTAssertThrowsError(try MountService(runner: runner).restoreReadOnlyMount(volume: testVolume())) { error in
+            guard case .mountFailed(let message) = error as? MountServiceError else {
+                return XCTFail("unexpected error: \(error)")
+            }
+            XCTAssertTrue(message.contains("已取消恢复只读"))
+        }
+        XCTAssertEqual(runner.invocations.count, 1)
+    }
+
     func testKernelLogPathIsExtractedFromMountOutput() {
         let output = """
         Linux: mount: wrong fs type
@@ -334,6 +413,19 @@ final class OpenNTFSCoreTests: XCTestCase {
         XCTAssertNil(MountService.parseRepairOutcome("command never finished"))
     }
 
+    private static var anylinuxfsIsInstalled: Bool {
+        FileManager.default.fileExists(atPath: "/opt/homebrew/bin/anylinuxfs") ||
+            FileManager.default.fileExists(atPath: "/usr/local/bin/anylinuxfs")
+    }
+
+    private static func diskutilInfoPlist(mountPoint: String?) throws -> Data {
+        var plist: [String: Any] = ["DeviceIdentifier": "disk9s1"]
+        if let mountPoint {
+            plist["MountPoint"] = mountPoint
+        }
+        return try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+    }
+
     private func testVolume() -> NTFSVolume {
         NTFSVolume(
             id: "disk9s1",
@@ -360,6 +452,37 @@ private final class ResultBox: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return storage
+    }
+}
+
+private final class QueuedRunner: CommandRunning, @unchecked Sendable {
+    struct Invocation: Equatable {
+        let executable: String
+        let arguments: [String]
+    }
+
+    private let lock = NSLock()
+    private var responses: [CommandResult]
+    private var recorded: [Invocation] = []
+
+    init(_ responses: [CommandResult]) {
+        self.responses = responses
+    }
+
+    var invocations: [Invocation] {
+        lock.lock()
+        defer { lock.unlock() }
+        return recorded
+    }
+
+    func run(_ executable: String, arguments: [String]) throws -> CommandResult {
+        lock.lock()
+        defer { lock.unlock() }
+        recorded.append(Invocation(executable: executable, arguments: arguments))
+        guard !responses.isEmpty else {
+            return CommandResult(status: 1, stdout: Data(), stderr: Data("unexpected command".utf8))
+        }
+        return responses.removeFirst()
     }
 }
 
